@@ -1,4 +1,4 @@
-"""Generic Packed Absorber Simulator V4 — Phase 3 property-resolution layer."""
+"""Generic Packed Absorber Simulator V4 — Phase 4 generic mass-transfer core."""
 
 from .models import (
     CarrierGasSpec,
@@ -41,7 +41,26 @@ from .resolver import (
     build_reference_resolver,
 )
 
+from .mass_transfer import (
+    AbsorberOperatingPoint,
+    CommonOndaState,
+    ComponentMassTransferResult,
+    InvalidMassTransferInput,
+    MassTransferError,
+    calculate_common_onda_state,
+    calculate_component_mass_transfer,
+    evaluate_component_from_resolver,
+)
+
 __all__ = [
+    "AbsorberOperatingPoint",
+    "CommonOndaState",
+    "ComponentMassTransferResult",
+    "MassTransferError",
+    "InvalidMassTransferInput",
+    "calculate_common_onda_state",
+    "calculate_component_mass_transfer",
+    "evaluate_component_from_resolver",
     "CarrierGasSpec",
     "ConfidenceClass",
     "DataProvenance",
