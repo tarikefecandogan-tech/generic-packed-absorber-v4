@@ -1,4 +1,4 @@
-"""Generic Packed Absorber Simulator V4 — Phase 2 data registry layer."""
+"""Generic Packed Absorber Simulator V4 — Phase 3 property-resolution layer."""
 
 from .models import (
     CarrierGasSpec,
@@ -22,6 +22,24 @@ from .registry import (
     UnknownEntityError,
     build_reference_registry,
 )
+from .resolver import (
+    CarrierPropertyOverrides,
+    ComponentPropertyOverrides,
+    CorrelationEstimate,
+    InvalidPropertyOverrideError,
+    MissingPropertyError,
+    PropertyResolutionError,
+    PropertyResolver,
+    ResolutionTier,
+    ResolvedCarrierState,
+    ResolvedComponentProperties,
+    ResolvedEquilibrium,
+    ResolvedProperty,
+    ResolvedSolventState,
+    SolventPropertyOverrides,
+    UnsupportedPropertyModelError,
+    build_reference_resolver,
+)
 
 __all__ = [
     "CarrierGasSpec",
@@ -44,4 +62,20 @@ __all__ = [
     "PairAvailability",
     "RegistryReadiness",
     "build_reference_registry",
+    "PropertyResolver",
+    "PropertyResolutionError",
+    "MissingPropertyError",
+    "UnsupportedPropertyModelError",
+    "InvalidPropertyOverrideError",
+    "ResolutionTier",
+    "ResolvedProperty",
+    "CorrelationEstimate",
+    "ComponentPropertyOverrides",
+    "CarrierPropertyOverrides",
+    "SolventPropertyOverrides",
+    "ResolvedCarrierState",
+    "ResolvedSolventState",
+    "ResolvedEquilibrium",
+    "ResolvedComponentProperties",
+    "build_reference_resolver",
 ]
