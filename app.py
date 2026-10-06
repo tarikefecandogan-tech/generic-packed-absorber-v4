@@ -1,11 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import asdict
-
 import pandas as pd
 import streamlit as st
 
-from generic_absorber_v4 import locked_reference_data
+from generic_absorber_v4 import (
+    MissingPairDataError,
+    SoluteSpec,
+    build_reference_registry,
+    locked_reference_data,
+)
 
 
 st.set_page_config(
@@ -23,14 +26,9 @@ def provenance_text(obj) -> str:
     return f"{p.confidence.value} · {p.method}"
 
 
-def optional(value, fmt="{}"):
-    return "—" if value is None else fmt.format(value)
-
-
 def solute_df(db):
-    rows = []
-    for s in db.solutes.values():
-        rows.append(
+    return pd.DataFrame(
+        [
             {
                 "ID": s.id,
                 "Name": s.name,
@@ -39,14 +37,14 @@ def solute_df(db):
                 "Carbon atoms": s.carbon_atoms,
                 "CAS": s.cas_number or "—",
             }
-        )
-    return pd.DataFrame(rows)
+            for s in db.solutes.values()
+        ]
+    )
 
 
 def carrier_df(db):
-    rows = []
-    for c in db.carriers.values():
-        rows.append(
+    return pd.DataFrame(
+        [
             {
                 "ID": c.id,
                 "Name": c.name,
@@ -57,14 +55,14 @@ def carrier_df(db):
                 "Sutherland S (K)": c.sutherland_S_K,
                 "Data": provenance_text(c),
             }
-        )
-    return pd.DataFrame(rows)
+            for c in db.carriers.values()
+        ]
+    )
 
 
 def solvent_df(db):
-    rows = []
-    for s in db.solvents.values():
-        rows.append(
+    return pd.DataFrame(
+        [
             {
                 "ID": s.id,
                 "Name": s.name,
@@ -76,14 +74,14 @@ def solvent_df(db):
                 "sigma const. (N/m)": s.sigma_N_m,
                 "Data": provenance_text(s),
             }
-        )
-    return pd.DataFrame(rows)
+            for s in db.solvents.values()
+        ]
+    )
 
 
 def gas_pair_df(db):
-    rows = []
-    for (solute, carrier), p in db.gas_transport_pairs.items():
-        rows.append(
+    return pd.DataFrame(
+        [
             {
                 "Solute": solute,
                 "Carrier": carrier,
@@ -93,14 +91,14 @@ def gas_pair_df(db):
                 "P_ref (Pa)": p.P_ref_Pa,
                 "Data": provenance_text(p),
             }
-        )
-    return pd.DataFrame(rows)
+            for (solute, carrier), p in db.gas_transport_pairs.items()
+        ]
+    )
 
 
 def liquid_pair_df(db):
-    rows = []
-    for (solute, solvent), p in db.liquid_transport_pairs.items():
-        rows.append(
+    return pd.DataFrame(
+        [
             {
                 "Solute": solute,
                 "Solvent": solvent,
@@ -109,14 +107,14 @@ def liquid_pair_df(db):
                 "T_ref (K)": p.T_ref_K,
                 "Data": provenance_text(p),
             }
-        )
-    return pd.DataFrame(rows)
+            for (solute, solvent), p in db.liquid_transport_pairs.items()
+        ]
+    )
 
 
 def equilibrium_df(db):
-    rows = []
-    for (solute, solvent), p in db.equilibrium_pairs.items():
-        rows.append(
+    return pd.DataFrame(
+        [
             {
                 "Solute": solute,
                 "Solvent": solvent,
@@ -127,14 +125,14 @@ def equilibrium_df(db):
                 "Linear m": p.m_y_over_x,
                 "Data": provenance_text(p),
             }
-        )
-    return pd.DataFrame(rows)
+            for (solute, solvent), p in db.equilibrium_pairs.items()
+        ]
+    )
 
 
 def packing_df(db):
-    rows = []
-    for p in db.packings.values():
-        rows.append(
+    return pd.DataFrame(
+        [
             {
                 "ID": p.id,
                 "Name": p.name,
@@ -148,39 +146,72 @@ def packing_df(db):
                 "Fp basis": p.packing_factor_basis,
                 "Data": provenance_text(p),
             }
-        )
+            for p in db.packings.values()
+        ]
+    )
+
+
+def availability_df(registry):
+    rows = []
+    for solute_id in registry.solutes:
+        for carrier_id in registry.carriers:
+            for solvent_id in registry.solvents:
+                r = registry.availability(solute_id, carrier_id, solvent_id)
+                rows.append(
+                    {
+                        "Solute": solute_id,
+                        "Carrier": carrier_id,
+                        "Solvent": solvent_id,
+                        "DG pair": "✓" if r.gas_transport_available else "✗",
+                        "DL pair": "✓" if r.liquid_transport_available else "✗",
+                        "Equilibrium": "✓" if r.equilibrium_available else "✗",
+                        "Registry status": r.status.value,
+                    }
+                )
     return pd.DataFrame(rows)
 
 
 DB = locked_reference_data()
+REGISTRY = build_reference_registry()
+COUNTS = REGISTRY.inventory_counts()
 
 st.title("🧪 Generic Packed Absorber Simulator V4")
-st.caption("Phase 1 — Generic data architecture and locked V3 reference dataset")
+st.caption("Phase 2 — Pair Database & Registry Layer")
 
 st.warning(
-    "Phase 1 is intentionally DATA-ONLY. Onda mass transfer, counter-current ODE, "
+    "Phase 2 is still a DATA/LOOKUP layer. Onda mass transfer, counter-current ODE, "
     "pressure drop, GPDC flooding, required height and generic outlet calculations are "
-    "not connected yet. This page proves that the new V4 data architecture loads correctly."
+    "not connected yet. Phase 2 adds exact pair lookup, registration rules and explicit "
+    "missing-data behavior on top of the locked Phase 1 dataset."
 )
 
 with st.sidebar:
-    st.header("Phase 1 Status")
+    st.header("Development Status")
     st.success("PHASE1_DATA_GATE = PASS")
-    st.metric("Reference ID", DB.reference_id)
-    st.metric("Solutes", len(DB.solutes))
-    st.metric("Carriers", len(DB.carriers))
-    st.metric("Solvents", len(DB.solvents))
-    st.metric("Packings", len(DB.packings))
+    st.success("PHASE2_REGISTRY_GATE = PASS")
+    st.metric("Reference ID", REGISTRY.reference_id)
+    st.metric("Gas transport pairs", COUNTS["gas_transport_pairs"])
+    st.metric("Liquid transport pairs", COUNTS["liquid_transport_pairs"])
+    st.metric("Equilibrium pairs", COUNTS["equilibrium_pairs"])
     st.divider()
-    st.caption("Locked reference system")
-    st.write("**Carrier:** Air")
-    st.write("**Solvent:** Water")
-    st.write("**Solutes:** ACN + VAc")
-    st.write("**Packing:** 25 mm Metal Pall Ring")
+    st.caption("Registry policy")
+    st.write("**Exact pair lookup**")
+    st.write("**No silent fallback**")
+    st.write("**Duplicate registration blocked by default**")
+    st.write("**Pair foreign keys validated**")
 
-summary_tab, solute_tab, fluid_tab, pair_tab, packing_tab, quality_tab = st.tabs(
+(
+    overview_tab,
+    lookup_tab,
+    solute_tab,
+    fluid_tab,
+    pair_tab,
+    packing_tab,
+    quality_tab,
+) = st.tabs(
     [
         "Overview",
+        "Registry Lookup",
         "Solutes",
         "Carrier & Solvent",
         "Binary Pairs",
@@ -189,25 +220,99 @@ summary_tab, solute_tab, fluid_tab, pair_tab, packing_tab, quality_tab = st.tabs
     ]
 )
 
-with summary_tab:
-    st.subheader("Phase 1 reference inventory")
+with overview_tab:
+    st.subheader("Phase 2 registry inventory")
     c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Solutes", len(DB.solutes))
-    c2.metric("Transport pairs", len(DB.gas_transport_pairs) + len(DB.liquid_transport_pairs))
-    c3.metric("Equilibrium pairs", len(DB.equilibrium_pairs))
-    c4.metric("Packings", len(DB.packings))
+    c1.metric("Solutes", COUNTS["solutes"])
+    c2.metric("Transport pairs", COUNTS["gas_transport_pairs"] + COUNTS["liquid_transport_pairs"])
+    c3.metric("Equilibrium pairs", COUNTS["equilibrium_pairs"])
+    c4.metric("Packings", COUNTS["packings"])
 
-    st.markdown("### Architecture introduced in Phase 1")
+    st.markdown("### Phase 2 architecture")
     st.code(
-        """SoluteSpec\nCarrierGasSpec\nSolventSpec\nPackingSpec\nGasTransportPair\nLiquidTransportPair\nEquilibriumPair\nDataProvenance / ConfidenceClass""",
+        """Phase 1 immutable data objects
+        ↓
+AbsorberDataRegistry
+        ↓
+exact pair lookup / registration / availability
+        ↓
+MissingPairDataError when critical pair data are absent
+
+No property estimation and no physics solver yet.""",
         language="text",
     )
 
-    st.markdown("### Scope boundary")
-    st.write(
-        "Only the locked ACN + VAc / Water / Air reference dataset is included. "
-        "No VDC or other new chemistry is intentionally present yet."
+    st.markdown("### Current combination readiness")
+    st.dataframe(availability_df(REGISTRY), use_container_width=True, hide_index=True)
+
+with lookup_tab:
+    st.subheader("Exact pair lookup")
+    st.caption(
+        "This panel queries the Phase 2 registry. It does not calculate any new property. "
+        "It only returns an explicitly registered pair."
     )
+
+    c1, c2, c3 = st.columns(3)
+    solute_id = c1.selectbox("Solute", list(REGISTRY.solutes), key="lookup_solute")
+    carrier_id = c2.selectbox("Carrier", list(REGISTRY.carriers), key="lookup_carrier")
+    solvent_id = c3.selectbox("Solvent", list(REGISTRY.solvents), key="lookup_solvent")
+
+    report = REGISTRY.availability(solute_id, carrier_id, solvent_id)
+    if report.status.value == "READY":
+        st.success("PAIR DATA READY")
+    else:
+        st.error(f"PAIR DATA INCOMPLETE · Missing: {', '.join(report.missing)}")
+
+    gas_pair = REGISTRY.find_gas_transport_pair(solute_id, carrier_id)
+    liquid_pair = REGISTRY.find_liquid_transport_pair(solute_id, solvent_id)
+    eq_pair = REGISTRY.find_equilibrium_pair(solute_id, solvent_id)
+
+    rows = [
+        {
+            "Required dataset": "Gas transport",
+            "Key": f"{solute_id} / {carrier_id}",
+            "Available": gas_pair is not None,
+            "Model": getattr(gas_pair, "model", "—"),
+            "Value": getattr(gas_pair, "D_ref_m2_s", None),
+            "Value field": "DG (m²/s)",
+        },
+        {
+            "Required dataset": "Liquid transport",
+            "Key": f"{solute_id} / {solvent_id}",
+            "Available": liquid_pair is not None,
+            "Model": getattr(liquid_pair, "model", "—"),
+            "Value": getattr(liquid_pair, "D_ref_m2_s", None),
+            "Value field": "DL (m²/s)",
+        },
+        {
+            "Required dataset": "Equilibrium",
+            "Key": f"{solute_id} / {solvent_id}",
+            "Available": eq_pair is not None,
+            "Model": getattr(eq_pair, "model", "—"),
+            "Value": getattr(eq_pair, "H_ref_Pa_m3_mol", None)
+            if getattr(eq_pair, "model", None) == "henry_pc"
+            else getattr(eq_pair, "m_y_over_x", None),
+            "Value field": "H_ref (Pa·m³/mol)" if getattr(eq_pair, "model", None) == "henry_pc" else "m",
+        },
+    ]
+    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+    st.markdown("### Missing-pair safety demonstration")
+    st.write(
+        "The button below creates a temporary synthetic solute identity **only in memory**, "
+        "without adding transport/equilibrium data. It demonstrates that the registry refuses "
+        "to substitute ACN/VAc data for an unknown pair."
+    )
+    if st.button("Run missing-pair safety check"):
+        demo = build_reference_registry()
+        demo.register_solute(SoluteSpec(id="X", name="Synthetic X", MW_kg_mol=0.050))
+        try:
+            demo.require_equilibrium_pair("X", "water")
+        except MissingPairDataError as exc:
+            st.success("PASS — missing pair was blocked; no fallback value was used.")
+            st.code(str(exc), language="text")
+        else:
+            st.error("FAIL — missing pair unexpectedly returned data.")
 
 with solute_tab:
     st.subheader("Pure solute definitions")
@@ -220,27 +325,23 @@ with solute_tab:
 with fluid_tab:
     st.subheader("Carrier gases")
     st.dataframe(carrier_df(DB), use_container_width=True, hide_index=True)
-
     st.subheader("Solvents")
     st.dataframe(solvent_df(DB), use_container_width=True, hide_index=True)
     st.info(
-        "Water is represented by the existing V3 temperature-dependent property model. "
-        "The numerical water-property calculation itself is intentionally not part of Phase 1."
+        "Water still points to the locked V3 property model. Property calculation/resolution "
+        "is a later phase; Phase 2 only registers the solvent definition."
     )
 
 with pair_tab:
     st.subheader("Solute–carrier gas transport pairs")
     st.dataframe(gas_pair_df(DB), use_container_width=True, hide_index=True)
-
     st.subheader("Solute–solvent liquid transport pairs")
     st.dataframe(liquid_pair_df(DB), use_container_width=True, hide_index=True)
-
     st.subheader("Solute–solvent equilibrium pairs")
     st.dataframe(equilibrium_df(DB), use_container_width=True, hide_index=True)
-
     st.info(
-        "Legacy DG and DL values do not declare reference temperature/pressure in the V3 source. "
-        "Phase 1 therefore keeps T_ref/P_ref empty instead of inventing metadata."
+        "Legacy DG and DL values still have no invented reference T/P metadata. "
+        "The registry returns the locked values exactly as stored."
     )
 
 with packing_tab:
@@ -248,11 +349,16 @@ with packing_tab:
     st.dataframe(packing_df(DB), use_container_width=True, hide_index=True)
 
 with quality_tab:
-    st.subheader("Data provenance and confidence")
-    st.write(
-        "The values in this Phase 1 reference dataset were copied without re-estimation from the "
-        "locked V3 reference engine. Scientific source review and new-chemistry database expansion "
-        "are intentionally deferred to later phases."
+    st.subheader("Registry safety rules")
+    st.markdown(
+        """
+- Pair keys are explicit: `(solute, carrier)` or `(solute, solvent)`.
+- A pair cannot be registered before its pure-component IDs exist.
+- Duplicate registration is rejected unless replacement is explicit.
+- `find_*` returns `None` for an absent pair when optional discovery is wanted.
+- `require_*` raises `MissingPairDataError` for critical lookup.
+- Phase 2 performs **no correlation fallback** and **no cross-chemical substitution**.
+        """
     )
 
     provenance_rows = []
@@ -279,18 +385,18 @@ with quality_tab:
                     "Validity note": p.validity_note,
                 }
             )
-
     st.dataframe(pd.DataFrame(provenance_rows), use_container_width=True, hide_index=True)
 
-    st.markdown("### Phase gate")
-    st.success("7/7 DATA-LAYER TESTS PASS · V3 SOURCE MATCH PASS")
+    st.markdown("### Phase gates")
+    st.success("PHASE1_DATA_GATE = PASS")
+    st.success("PHASE2_REGISTRY_GATE = PASS")
     st.caption(
-        "This is a migration/integrity gate, not a claim that the scientific property sources have "
-        "already been independently revalidated."
+        "These are architecture/integrity gates. Scientific source revalidation and property "
+        "estimation are deliberately outside Phase 2."
     )
 
 st.divider()
 st.caption(
-    "Generic Packed Absorber Simulator V4 · Phase 1 · Data architecture only · "
-    "Next: Phase 2 pair registry / lookup layer"
+    "Generic Packed Absorber Simulator V4 · Phase 2 · Pair database / registry layer · "
+    "Next: Phase 3 property resolver"
 )
