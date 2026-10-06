@@ -1,4 +1,4 @@
-"""Generic Packed Absorber Simulator V4 — Phase 8 applicability and validity engine."""
+"""Generic Packed Absorber Simulator V4 — Phase 9 full V3 parity milestone."""
 
 from .models import (
     CarrierGasSpec,
@@ -96,6 +96,19 @@ from .applicability import (
     assess_pre_applicability,
 )
 
+
+from .parity import (
+    FullParityReport,
+    ParityMetricResult,
+    ParityTolerance,
+    ReferenceMetric,
+    REFERENCE_SOURCE_LABEL,
+    REFERENCE_SOURCE_SHA256,
+    V3_REFERENCE_METRICS,
+    reference_chain_health,
+    run_full_v3_parity,
+)
+
 from .units import (
     CompositionFractionBasis,
     ComponentGasReport,
@@ -120,6 +133,15 @@ from .units import (
 )
 
 __all__ = [
+    "FullParityReport",
+    "ParityMetricResult",
+    "ParityTolerance",
+    "ReferenceMetric",
+    "REFERENCE_SOURCE_LABEL",
+    "REFERENCE_SOURCE_SHA256",
+    "V3_REFERENCE_METRICS",
+    "reference_chain_health",
+    "run_full_v3_parity",
     "ApplicabilityCase",
     "ApplicabilityIssue",
     "ApplicabilityReport",

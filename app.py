@@ -35,6 +35,9 @@ from generic_absorber_v4 import (
     normal_m3_h_to_actual_m3_h,
     report_gas_stream,
     DEFAULT_NORMAL_CONDITIONS,
+    REFERENCE_SOURCE_SHA256,
+    reference_chain_health,
+    run_full_v3_parity,
 )
 
 st.set_page_config(
@@ -201,12 +204,12 @@ RESOLVER = build_reference_resolver()
 COUNTS = REGISTRY.inventory_counts()
 
 st.title("🧪 Generic Packed Absorber Simulator V4")
-st.caption("Phase 8 — Applicability, Validity & Confidence Engine")
+st.caption("Phase 9 — Full V3 Parity Gate")
 
 st.warning(
-    "Phase 8 adds an explicit applicability/validity layer around the Phase 1–7 physics. Critical missing "
-    "data and unsupported physics are blocked; extrapolation, data-quality limits, Onda screening ranges, "
-    "mass-balance closure and flooding are reported visibly. Required-height design remains outside this phase."
+    "Phase 9 does not revise absorber physics. It locks the complete Phase 1–8 reference calculation chain "
+    "against REF_SCRUBBER_2026_10_06 and checks 82 feed, property, Onda, mass-transfer, outlet and hydraulic "
+    "metrics automatically. Required-height design remains outside the current parity scope."
 )
 
 with st.sidebar:
@@ -219,6 +222,7 @@ with st.sidebar:
     st.success("PHASE6_HYDRAULICS_GATE = PASS")
     st.success("PHASE7_UNITS_COMPOSITION_GATE = PASS")
     st.success("PHASE8_APPLICABILITY_GATE = PASS")
+    st.success("PHASE9_FULL_V3_PARITY_GATE = PASS")
     st.metric("Reference ID", REGISTRY.reference_id)
     st.divider()
     st.caption("Resolution precedence")
@@ -236,6 +240,7 @@ with st.sidebar:
     hydraulics_tab,
     units_tab,
     applicability_tab,
+    parity_tab,
     lookup_tab,
     solute_tab,
     fluid_tab,
@@ -250,6 +255,7 @@ with st.sidebar:
     "Hydraulics",
     "Units & Composition",
     "Applicability & Validity",
+    "V3 Parity Gate",
     "Registry Lookup",
     "Solutes",
     "Carrier & Solvent",
@@ -297,6 +303,11 @@ POST: Onda ranges + ODE closure + driving force + flooding
         ↓
 READY / READY_WITH_WARNINGS / OUTSIDE_RECOMMENDED_RANGE
 INSUFFICIENT_DATA / UNSUPPORTED_PHYSICS / NUMERICAL_FAILURE
+        ↓
+Phase 9 Full V3 Parity Harness
+        ↓
+82 locked expected-vs-actual reference checks
+source hash + section gates + regression tolerances
 
 No required-height design yet.""",
         language="text",
@@ -992,6 +1003,85 @@ with applicability_tab:
     else:
         st.info("Physics calculation is intentionally not launched because the pre-solver gate contains a blocking issue.")
 
+
+with parity_tab:
+    st.subheader("Full V3 reference parity gate")
+    st.caption(
+        "This is a regression-verification layer, not a new correlation. The complete V4 reference chain is "
+        "executed and compared against the frozen REF_SCRUBBER_2026_10_06 numerical fixture."
+    )
+
+    p1, p2 = st.columns(2)
+    p1.metric("Reference ID", REGISTRY.reference_id)
+    p2.code(REFERENCE_SOURCE_SHA256, language="text")
+    st.caption("SHA-256 belongs to the locked scrubber_model.py source used to create the Phase 9 fixture.")
+
+    if st.button("Run full V3 parity gate", type="primary", key="run_phase9_parity"):
+        parity_report = run_full_v3_parity()
+        health = reference_chain_health()
+        if parity_report.passed:
+            st.success(
+                f"PHASE9_FULL_V3_PARITY_GATE = PASS · "
+                f"{parity_report.passed_count}/{parity_report.total_count} metrics passed"
+            )
+        else:
+            st.error(
+                f"PHASE9_FULL_V3_PARITY_GATE = FAIL · "
+                f"{parity_report.failed_count} metric(s) outside tolerance"
+            )
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Parity metrics", parity_report.total_count)
+        c2.metric("Passed", parity_report.passed_count)
+        c3.metric("Failed", parity_report.failed_count)
+        c4.metric("Phase 8 final status", health["phase8_final_status"])
+
+        section_rows = []
+        for section, metrics in parity_report.sections.items():
+            passed_count = sum(m.passed for m in metrics)
+            section_rows.append({
+                "Section": section,
+                "Passed": passed_count,
+                "Total": len(metrics),
+                "Gate": "PASS" if passed_count == len(metrics) else "FAIL",
+            })
+        st.markdown("### Section gates")
+        st.dataframe(pd.DataFrame(section_rows), use_container_width=True, hide_index=True)
+
+        metric_rows = []
+        for m in parity_report.metrics:
+            metric_rows.append({
+                "Section": m.section,
+                "Metric": m.name,
+                "Expected": m.expected,
+                "Actual": m.actual,
+                "Unit": m.unit or "—",
+                "Abs. error": m.absolute_error,
+                "Rel. error": m.relative_error,
+                "rtol": m.rtol,
+                "atol": m.atol,
+                "Gate": "PASS" if m.passed else "FAIL",
+            })
+        st.markdown("### Expected vs actual")
+        st.dataframe(pd.DataFrame(metric_rows), use_container_width=True, hide_index=True)
+
+        st.markdown("### Integrated-chain health")
+        h1, h2, h3 = st.columns(3)
+        h1.metric("Pre-solver", health["phase8_pre_status"])
+        h2.metric("Final applicability", health["phase8_final_status"])
+        h3.metric("Overall confidence", health["phase8_overall_confidence"])
+        st.caption(
+            f"Mass-balance relative error: ACN={health['ACN_mass_balance_relative_error']:.3e}, "
+            f"VAc={health['VAc_mass_balance_relative_error']:.3e}."
+        )
+    else:
+        st.info("Press the button to execute the complete locked reference chain and display all parity metrics.")
+
+    st.info(
+        "Phase 9 intentionally does not include required-height design in the parity metric set. "
+        "No existing physics equation was changed in this phase."
+    )
+
 with lookup_tab:
     st.subheader("Exact pair lookup — Phase 2 remains intact")
     c1, c2, c3 = st.columns(3)
@@ -1072,6 +1162,8 @@ with quality_tab:
 - Phase 8 separates pre-solver data/physics readiness from post-solver numerical/correlation/hydraulic validity.
 - BLOCK / WARNING / INFO issues are explicit; confidence is categorical rather than a fabricated percentage.
 - Local negative driving force is reported as physical desorption, while numerical mass-balance/boundary failures receive a distinct NUMERICAL_FAILURE state.
+- Phase 9 runs the complete reference chain and compares 82 locked V3 metrics using declared algebra/coefficient/solver/reporting/hydraulic tolerances.
+- The parity fixture is tied to the locked reference source by SHA-256; future intentional physics revisions must create a new reference rather than silently moving this baseline.
         """
     )
 
@@ -1108,10 +1200,11 @@ with quality_tab:
     st.success("PHASE6_HYDRAULICS_GATE = PASS")
     st.success("PHASE7_UNITS_COMPOSITION_GATE = PASS")
     st.success("PHASE8_APPLICABILITY_GATE = PASS")
-    st.caption("76 automated tests pass in the packaged Phase 8 source tree.")
+    st.success("PHASE9_FULL_V3_PARITY_GATE = PASS")
+    st.caption("85 automated tests pass in the packaged Phase 9 source tree; the parity harness itself checks 82 locked V3 metrics.")
 
 st.divider()
 st.caption(
-    "Generic Packed Absorber Simulator V4 · Phase 8 · Applicability, Validity & Confidence Engine · "
-    "Next: Phase 9 full V3 parity gate"
+    "Generic Packed Absorber Simulator V4 · Phase 9 · Full V3 Parity Gate · "
+    "Next: Phase 10 synthetic generic chemistry test"
 )
