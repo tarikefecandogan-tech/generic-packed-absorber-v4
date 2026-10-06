@@ -1,19 +1,16 @@
-# Streamlit Community Cloud Deployment
+# Streamlit Community Cloud deployment — Phase 3
 
-1. Upload the contents of this folder to the root of your GitHub repository.
-2. Confirm that `app.py` and `requirements.txt` are visible in the repository root.
-3. Open Streamlit Community Cloud: https://share.streamlit.io/
-4. Choose **Create app** / **New app**.
-5. Select your GitHub repository and the `main` branch.
-6. Set **Main file path** to:
+Use the same GitHub repository and the same Streamlit app created for Phase 1/2.
 
-   `app.py`
+1. Extract the Phase 3 ZIP locally.
+2. Upload the updated files/folders to the **root of the existing GitHub repository**.
+3. Confirm the repository root contains `app.py`, `requirements.txt`, and the folder `generic_absorber_v4/`.
+4. Inside `generic_absorber_v4/`, confirm `resolver.py` is present together with `__init__.py`, `models.py`, `reference_data.py`, and `registry.py`.
+5. Commit with a message such as `Phase 3 - property resolver`.
+6. Streamlit Community Cloud should redeploy automatically from the existing app.
+7. After redeploy, the sidebar should show:
+   - `PHASE1_DATA_GATE = PASS`
+   - `PHASE2_REGISTRY_GATE = PASS`
+   - `PHASE3_RESOLVER_GATE = PASS`
 
-7. Deploy.
-
-The app should open with the title **Generic Packed Absorber Simulator V4** and show:
-
-`PHASE1_DATA_GATE = PASS`
-
-## Important
-Phase 1 is data-only. It does not yet calculate scrubber outlet concentration, Onda coefficients, flooding, pressure drop, or required height.
+Do not create a new Streamlit application unless the existing deployment has been deleted.

@@ -1,61 +1,47 @@
-# Generic Packed Absorber Simulator V4 — Phase 1 Data Layer
+# Generic Packed Absorber Simulator V4
 
-This package implements **Phase 1 only** of the agreed V4 migration plan.
+## Current development stage: Phase 3 — Property Resolver
 
-## Included
-- `SoluteSpec`
-- `CarrierGasSpec`
-- `SolventSpec`
-- `PackingSpec`
-- `GasTransportPair`
-- `LiquidTransportPair`
-- `EquilibriumPair`
-- provenance / confidence metadata
-- locked reference data for ACN + VAc / Water / Air + 25 mm Metal Pall Ring
-- data-integrity tests
+This repository is being built in controlled phases from the locked ACN + VAc / Water / Air reference scrubber model.
 
-## Intentionally not included in this phase
-- Onda calculations
-- two-film `KG`
-- counter-current ODE
-- GPDC flooding
-- pressure drop
-- unit/concentration conversion
-- property resolver / fallback correlations
-- VDC or other new chemistry
-- Streamlit integration
+### Completed gates
 
-## Locked reference
-`REF_SCRUBBER_2026_10_06`
+- `PHASE1_DATA_GATE = PASS` — immutable generic data objects and locked reference dataset.
+- `PHASE2_REGISTRY_GATE = PASS` — exact pair registry, lookup and missing-pair safety.
+- `PHASE3_RESOLVER_GATE = PASS` — operating-point property resolution with provenance and precedence.
 
-The values in `reference_data.py` are copied from the existing project reference engine so later V4 phases can prove numerical parity before adding new chemistry.
-
-## Run the gate
-
-```bash
-python phase1_check.py
-pytest -q
-```
-
-Expected:
+### Phase 3 resolution hierarchy
 
 ```text
-PHASE1_DATA_GATE=PASS
-7 passed
+User Override
+    ↓ if absent
+Registered Database / Pair
+    ↓ if absent
+Configured Correlation Estimate Hook
+    ↓ if absent
+MissingPropertyError
 ```
 
-## Reference-condition policy
-The legacy V3 `DG` and `DL` constants do not declare reference T/P in the source. Phase 1 therefore stores those conditions as `None` rather than inventing metadata. Later transport-correlation work may introduce verified reference conditions.
+The reference build does **not** activate Fuller or Wilke–Chang automatically yet. This is intentional: reference parity is established before adding estimation correlations.
 
-## Streamlit preview added
+### Streamlit
 
-This package now includes a lightweight Phase 1 Streamlit frontend:
+Run locally with:
 
 ```bash
-pip install -r requirements.txt
 streamlit run app.py
 ```
 
-The frontend is intentionally data-only and displays the locked reference dataset, binary pair architecture, packing definition, and provenance/confidence metadata.
+The Streamlit app exposes the Phase 1 dataset, Phase 2 registry and the new Phase 3 property resolver. It does not yet calculate scrubber removal or hydraulics.
 
-For Streamlit Community Cloud instructions, see `STREAMLIT_DEPLOY.md`.
+### Tests
+
+```bash
+PYTHONPATH=. pytest -q
+```
+
+Current packaged result: **23 passed**.
+
+### Next planned phase
+
+**Phase 4 — Generic Onda mass-transfer core** using only resolved numeric properties. The Phase 4 engine must not branch on chemical names.
