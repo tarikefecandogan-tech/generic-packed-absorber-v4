@@ -1,4 +1,4 @@
-"""Generic Packed Absorber Simulator V4 — Phase 6 generic hydraulics."""
+"""Generic Packed Absorber Simulator V4 — Phase 7 generic units and composition."""
 
 from .models import (
     CarrierGasSpec,
@@ -83,7 +83,50 @@ from .countercurrent import (
     solve_independent_solutes,
 )
 
+from .units import (
+    CompositionFractionBasis,
+    ComponentGasReport,
+    ConcentrationTarget,
+    DEFAULT_NORMAL_CONDITIONS,
+    GasConcentrationBasis,
+    GasStreamBalance,
+    GasStreamReport,
+    MixtureInputResult,
+    NormalConditions,
+    UnitConversionError,
+    actual_m3_h_to_normal_m3_h,
+    canonical_y_from_component_concentrations,
+    canonical_y_from_total_and_fractions,
+    component_concentration_to_y,
+    component_y_to_concentration,
+    gas_stream_balance,
+    liquid_mg_L_to_x_dilute,
+    liquid_x_to_mg_L_dilute,
+    normal_m3_h_to_actual_m3_h,
+    report_gas_stream,
+)
+
 __all__ = [
+    "CompositionFractionBasis",
+    "ComponentGasReport",
+    "ConcentrationTarget",
+    "DEFAULT_NORMAL_CONDITIONS",
+    "GasConcentrationBasis",
+    "GasStreamBalance",
+    "GasStreamReport",
+    "MixtureInputResult",
+    "NormalConditions",
+    "UnitConversionError",
+    "actual_m3_h_to_normal_m3_h",
+    "canonical_y_from_component_concentrations",
+    "canonical_y_from_total_and_fractions",
+    "component_concentration_to_y",
+    "component_y_to_concentration",
+    "gas_stream_balance",
+    "liquid_mg_L_to_x_dilute",
+    "liquid_x_to_mg_L_dilute",
+    "normal_m3_h_to_actual_m3_h",
+    "report_gas_stream",
     "PackingFactorResult",
     "PressureDropResult",
     "FloodingResult",

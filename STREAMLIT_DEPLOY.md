@@ -1,6 +1,6 @@
-# Streamlit Community Cloud — Phase 6
+# Streamlit Community Cloud — Phase 7
 
-Update the **existing GitHub repository** with the entire Phase 6 package.
+Update the **existing GitHub repository** with the entire Phase 7 package.
 Do not create a new repository.
 
 Repository root should contain at least:
@@ -8,7 +8,7 @@ Repository root should contain at least:
 ```text
 app.py
 requirements.txt
-PHASE6_STATUS.md
+PHASE7_STATUS.md
 generic_absorber_v4/
 tests/
 ```
@@ -25,10 +25,11 @@ generic_absorber_v4/
     mass_transfer.py
     countercurrent.py
     hydraulics.py
+    units.py
 ```
 
-Keep the existing `requirements.txt`; Phase 6 uses the NumPy/SciPy dependencies
-already introduced in Phase 5.
+No new third-party dependency is required in Phase 7; keep the existing
+Streamlit/Pandas/NumPy/SciPy requirements.
 
 Streamlit Community Cloud settings remain:
 
@@ -37,7 +38,7 @@ Streamlit Community Cloud settings remain:
 
 Suggested commit message:
 
-`Phase 6 - generic packed-column hydraulics`
+`Phase 7 - generic units and composition layer`
 
-After redeploy, the sidebar should show six PASS gates and the new
-**Hydraulics** tab should be visible.
+After redeploy, the sidebar should show seven PASS gates and the new
+**Units & Composition** tab should be visible.

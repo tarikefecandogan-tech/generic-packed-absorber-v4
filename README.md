@@ -1,6 +1,6 @@
 # Generic Packed Absorber Simulator V4
 
-Current implementation milestone: **Phase 6 — Generic Packed-Column Hydraulics**.
+Current implementation milestone: **Phase 7 — Generic Units & Composition Layer**.
 
 The development sequence preserves the locked V3 reference behavior before
 adding new chemistry or revising correlations.
@@ -25,12 +25,18 @@ adding new chemistry or revising correlations.
    - `y_out`, `x_bottom`, removal and bed profiles
    - preloaded solvent and desorption support
 6. **Phase 6 — Generic hydraulics**
-   - liquid holdup
-   - dry/wet screening pressure drop
-   - GPDC flood velocity and percent flood
-   - hydraulic-regime classification
+   - liquid holdup and screening dry/wet pressure drop
+   - GPDC flood velocity / percent flood / hydraulic regime
    - empirical packing factor with visible geometric fallback
    - Kister–Gill pressure-drop-at-flood diagnostic
+7. **Phase 7 — Generic units & composition**
+   - canonical solver variables remain `y_i` and `x_i`
+   - ppmv / mgVOC/Nm³ / mgC/Nm³ conversion
+   - mole-, VOC-mass- and carbon-mass fraction handling
+   - component-by-component or total-mixture input
+   - dilute liquid mg/L ↔ x conversion
+   - actual ↔ normal gas-flow conversion
+   - multicomponent outlet reconstruction and basis-dependent removal reporting
 
 ## Current gates
 
@@ -40,15 +46,17 @@ adding new chemistry or revising correlations.
 - `PHASE4_MASS_TRANSFER_GATE = PASS`
 - `PHASE5_COUNTERCURRENT_GATE = PASS`
 - `PHASE6_HYDRAULICS_GATE = PASS`
-- **48 automated tests PASS**
+- `PHASE7_UNITS_COMPOSITION_GATE = PASS`
+- **62 automated tests PASS**
 
 ## Locked reference
 
 `REF_SCRUBBER_2026_10_06`
 
-Phase 6 reproduces the locked V3 hydraulic reference values for the 25 mm Metal
-Pall Ring case, including wet pressure drop, GPDC flood velocity, F_LV, CP and
-percent flood.
+Phase 7 reproduces the locked reference feed and outlet in all three reporting
+bases. The locked 5000 mgVOC/Nm³ feed is 2055.40921081 ppmv and
+3353.13446738 mgC/Nm³. The locked solved outlet is 106.622281367 mgVOC/Nm³,
+29.2909820172 ppmv and 60.6459573478 mgC/Nm³.
 
 ## Streamlit
 
@@ -58,17 +66,17 @@ Entrypoint: `app.py`
 streamlit run app.py
 ```
 
-The application now includes a **Hydraulics** tab in addition to the data,
-property resolver, mass-transfer and counter-current solver tabs.
+The application now includes a **Units & Composition** tab in addition to the
+resolver, mass-transfer, counter-current and hydraulics views.
 
 ## Scope boundary
 
-The packed-bed pressure-drop expression remains a **screening-level model**.
-GPDC is used for capacity/flooding. Kister–Gill pressure drop at flood is shown
-only as a diagnostic. Foaming, entrainment, distributor/support pressure losses,
-demisters, fouling and maldistribution are not modeled.
+Phase 7 is a conversion/reporting layer. It does **not** alter Onda, two-film,
+ODE or GPDC equations. Normal reporting uses 273.15 K and 101325 Pa. Fractions
+are not silently normalized and outlet mixture composition is never inferred
+from inlet fractions.
 
-Concentration-basis reconstruction and required-height design remain outside
-Phase 6.
+Required-height design and full applicability/validity classification remain
+outside this phase.
 
-Next: **Phase 7 — Generic Units & Composition Layer**.
+Next: **Phase 8 — Applicability / Validity Engine**.

@@ -18,6 +18,18 @@ from generic_absorber_v4 import (
     evaluate_component_from_resolver,
     evaluate_hydraulics_from_resolver,
     solve_component_countercurrent,
+    CompositionFractionBasis,
+    GasConcentrationBasis,
+    actual_m3_h_to_normal_m3_h,
+    canonical_y_from_component_concentrations,
+    canonical_y_from_total_and_fractions,
+    component_y_to_concentration,
+    gas_stream_balance,
+    liquid_mg_L_to_x_dilute,
+    liquid_x_to_mg_L_dilute,
+    normal_m3_h_to_actual_m3_h,
+    report_gas_stream,
+    DEFAULT_NORMAL_CONDITIONS,
 )
 
 st.set_page_config(
@@ -184,13 +196,13 @@ RESOLVER = build_reference_resolver()
 COUNTS = REGISTRY.inventory_counts()
 
 st.title("🧪 Generic Packed Absorber Simulator V4")
-st.caption("Phase 6 — Generic Packed-Column Hydraulics")
+st.caption("Phase 7 — Generic Units & Composition Layer")
 
 st.warning(
-    "Phase 6 adds a generic hydraulic layer independent of dilute-solute identity. It calculates "
-    "screening dry/wet packed-bed pressure drop, liquid holdup, GPDC flood velocity and percent flood. "
-    "Kister–Gill pressure drop at flood is retained only as a diagnostic. Concentration-basis conversion "
-    "and required-height design remain outside this phase."
+    "Phase 7 adds the generic units/composition boundary around the existing physics. The solvers still use "
+    "canonical gas mole fractions y_i and liquid mole fractions x_i; ppmv, mgVOC/Nm³, mgC/Nm³, mixture "
+    "fraction bases and liquid mg/L are converted only at the input/reporting layer. Required-height design "
+    "remains outside this phase."
 )
 
 with st.sidebar:
@@ -201,6 +213,7 @@ with st.sidebar:
     st.success("PHASE4_MASS_TRANSFER_GATE = PASS")
     st.success("PHASE5_COUNTERCURRENT_GATE = PASS")
     st.success("PHASE6_HYDRAULICS_GATE = PASS")
+    st.success("PHASE7_UNITS_COMPOSITION_GATE = PASS")
     st.metric("Reference ID", REGISTRY.reference_id)
     st.divider()
     st.caption("Resolution precedence")
@@ -216,6 +229,7 @@ with st.sidebar:
     mass_transfer_tab,
     solver_tab,
     hydraulics_tab,
+    units_tab,
     lookup_tab,
     solute_tab,
     fluid_tab,
@@ -228,6 +242,7 @@ with st.sidebar:
     "Mass Transfer",
     "Counter-Current Solver",
     "Hydraulics",
+    "Units & Composition",
     "Registry Lookup",
     "Solutes",
     "Carrier & Solvent",
@@ -261,7 +276,14 @@ Phase 6 Generic Hydraulics
         ↓
 hL, dry/wet dP, GPDC U_flood, % flood, hydraulic regime
 
-No concentration-basis conversion / required-height design yet.""",
+Phase 7 Units & Composition Boundary
+        ↓
+ppmv / mgVOC/Nm³ / mgC/Nm³ ↔ canonical y_i
+liquid mg/L ↔ canonical x_i
+actual ↔ normal gas flow
+mixture fraction basis handling + multicomponent outlet reconstruction
+
+No required-height design yet.""",
         language="text",
     )
 
@@ -543,15 +565,14 @@ with solver_tab:
         st.caption(
             "ppmv convenience view: y_in = "
             f"{cc_result.gas_inlet_y*1e6:.3f} ppmv, y_out = {cc_result.gas_outlet_y*1e6:.3f} ppmv. "
-            "The full concentration-basis conversion architecture is intentionally deferred to Phase 7."
+            "Full basis conversion and multicomponent reporting are available in the Units & Composition tab."
         )
     except Exception as exc:
         st.error(str(exc))
 
-    st.warning(
-        "The counter-current solver remains a component y/x layer. Phase 6 hydraulics is calculated "
-        "separately from carrier/solvent/packing/flow data; concentration-basis conversion and required "
-        "height are still deferred."
+    st.info(
+        "The counter-current solver intentionally remains a canonical component y/x layer. Phase 7 converts "
+        "UI/reporting bases outside the solver; required-height design remains deferred."
     )
 
 with hydraulics_tab:
@@ -639,6 +660,147 @@ with hydraulics_tab:
     except Exception as exc:
         st.error(str(exc))
 
+
+with units_tab:
+    st.subheader("Generic units & composition boundary")
+    st.caption(
+        "The solver basis remains y_i / x_i. This tab demonstrates reversible UI conversions, "
+        "mixture-basis handling and outlet reconstruction from solved component values. "
+        "Normal conditions are fixed at 273.15 K and 101325 Pa for V4.0 reference reporting."
+    )
+
+    st.markdown("### Normal-condition reference")
+    n1, n2, n3 = st.columns(3)
+    n1.metric("T_N", f"{DEFAULT_NORMAL_CONDITIONS.temperature_K:.2f} K")
+    n2.metric("P_N", f"{DEFAULT_NORMAL_CONDITIONS.pressure_Pa:.0f} Pa")
+    n3.metric("Ideal-gas molar density", f"{DEFAULT_NORMAL_CONDITIONS.molar_concentration_mol_m3:.6f} mol/Nm³")
+
+    st.markdown("### Total mixture + composition fractions → canonical y_i")
+    u1, u2, u3 = st.columns(3)
+    total_basis_label = u1.selectbox(
+        "Total concentration basis",
+        [b.value for b in GasConcentrationBasis],
+        index=0,
+        key="u_total_basis",
+    )
+    total_default = 5000.0 if total_basis_label == "mgVOC/Nm³" else (3353.134467 if total_basis_label == "mgC/Nm³" else 2055.409211)
+    total_value = u2.number_input("Total concentration", min_value=0.0, value=float(total_default), format="%.6f", key="u_total_value")
+    fraction_basis_label = u3.selectbox(
+        "Composition fraction basis",
+        [b.value for b in CompositionFractionBasis],
+        index=1,
+        key="u_fraction_basis",
+    )
+
+    f1, f2 = st.columns(2)
+    acn_fraction_pct = f1.number_input("ACN fraction (%)", min_value=0.0, max_value=100.0, value=93.0, step=1.0, key="u_acn_fraction")
+    vac_fraction_pct = f2.number_input("VAc fraction (%)", min_value=0.0, max_value=100.0, value=7.0, step=1.0, key="u_vac_fraction")
+
+    try:
+        mixture = canonical_y_from_total_and_fractions(
+            total_value,
+            total_basis_label,
+            {"ACN": acn_fraction_pct / 100.0, "VAc": vac_fraction_pct / 100.0},
+            fraction_basis_label,
+            REGISTRY.solutes,
+        )
+        st.success("UNIT / COMPOSITION RESOLUTION READY")
+        mix_rows = []
+        for sid, comp in mixture.report.components.items():
+            mix_rows.append({
+                "Solute": sid,
+                "y_i": comp.y,
+                "ppmv": comp.ppmv,
+                "mgVOC/Nm³": comp.mgVOC_Nm3,
+                "mgC/Nm³": comp.mgC_Nm3,
+            })
+        st.dataframe(pd.DataFrame(mix_rows), use_container_width=True, hide_index=True)
+        t1, t2, t3 = st.columns(3)
+        t1.metric("Total ppmv", f"{mixture.report.total_ppmv:.6f}")
+        t2.metric("Total mgVOC/Nm³", f"{mixture.report.total_mgVOC_Nm3:.6f}")
+        t3.metric("Total mgC/Nm³", f"{mixture.report.total_mgC_Nm3:.6f}")
+    except Exception as exc:
+        st.error(str(exc))
+        mixture = None
+
+    st.markdown("### Component-by-component input")
+    c1, c2, c3 = st.columns(3)
+    component_basis = c1.selectbox("Component input basis", [b.value for b in GasConcentrationBasis], key="u_component_basis")
+    acn_component = c2.number_input("ACN component concentration", min_value=0.0, value=4650.0, format="%.6f", key="u_acn_component")
+    vac_component = c3.number_input("VAc component concentration", min_value=0.0, value=350.0, format="%.6f", key="u_vac_component")
+    try:
+        y_components = canonical_y_from_component_concentrations(
+            {"ACN": acn_component, "VAc": vac_component}, component_basis, REGISTRY.solutes
+        )
+        comp_report = report_gas_stream(y_components, REGISTRY.solutes)
+        st.write(
+            f"Canonical total y = **{comp_report.total_y:.9g}** · "
+            f"{comp_report.total_ppmv:.4f} ppmv · "
+            f"{comp_report.total_mgVOC_Nm3:.4f} mgVOC/Nm³"
+        )
+    except Exception as exc:
+        st.error(str(exc))
+
+    st.markdown("### Locked solved outlet reconstruction")
+    st.caption("These are the Phase 5 locked component y_out values; the inlet fractions are not reused at the outlet.")
+    locked_in = {"ACN": 0.001964284929935824, "VAc": 9.112428087594802e-05}
+    locked_out = {"ACN": 3.991282910574221e-06, "VAc": 2.5299699106660017e-05}
+    balance = gas_stream_balance(locked_in, locked_out, REGISTRY.solutes, gas_molar_flow_mol_s=1.34798753171)
+    out_rows = []
+    for sid, comp in balance.outlet.components.items():
+        out_rows.append({
+            "Solute": sid,
+            "y_out": comp.y,
+            "ppmv": comp.ppmv,
+            "mgVOC/Nm³": comp.mgVOC_Nm3,
+            "mgC/Nm³": comp.mgC_Nm3,
+            "Component removal (%)": 100.0 * balance.component_removal_fraction[sid],
+            "Captured (kg/h)": balance.captured_kg_h_by_component[sid],
+        })
+    st.dataframe(pd.DataFrame(out_rows), use_container_width=True, hide_index=True)
+    r1, r2, r3, r4 = st.columns(4)
+    r1.metric("Outlet mgVOC/Nm³", f"{balance.outlet.total_mgVOC_Nm3:.6f}")
+    r2.metric("VOC-mass removal", f"{100*balance.overall_removal_voc_mass:.4f}%")
+    r3.metric("Molar removal", f"{100*balance.overall_removal_molar:.4f}%")
+    r4.metric("Carbon removal", f"{100*balance.overall_removal_carbon_mass:.4f}%")
+    st.info(
+        "Overall removal is basis-dependent for a multicomponent mixture. Component removal itself is based directly on y_in/y_out."
+    )
+
+    st.markdown("### Liquid loading: mg/L ↔ x (dilute approximation)")
+    l1, l2, l3 = st.columns(3)
+    liq_solute_id = l1.selectbox("Liquid solute", list(REGISTRY.solutes), key="u_liq_solute")
+    liq_temp_C = l2.number_input("Liquid temperature (°C)", value=22.0, step=1.0, key="u_liq_temp")
+    liq_mg_L = l3.number_input("Liquid loading (mg/L)", min_value=0.0, value=100.0, step=10.0, key="u_liq_mgL")
+    try:
+        solvent_state = RESOLVER.resolve_solvent_state("water", liq_temp_C + 273.15)
+        solute = REGISTRY.solutes[liq_solute_id]
+        x_liq = liquid_mg_L_to_x_dilute(
+            liq_mg_L,
+            solute_MW_kg_mol=solute.MW_kg_mol,
+            solvent_MW_kg_mol=REGISTRY.solvents["water"].MW_kg_mol,
+            solvent_density_kg_m3=solvent_state.density.value,
+        )
+        back_mg_L = liquid_x_to_mg_L_dilute(
+            x_liq,
+            solute_MW_kg_mol=solute.MW_kg_mol,
+            solvent_MW_kg_mol=REGISTRY.solvents["water"].MW_kg_mol,
+            solvent_density_kg_m3=solvent_state.density.value,
+        )
+        st.write(f"Canonical x = **{x_liq:.8e}** · round-trip = **{back_mg_L:.6f} mg/L**")
+    except Exception as exc:
+        st.error(str(exc))
+
+    st.markdown("### Actual ↔ normal gas flow")
+    q1, q2, q3 = st.columns(3)
+    qa = q1.number_input("Actual gas flow (m³/h)", min_value=0.0, value=117.53, key="u_qa")
+    qt = q2.number_input("Operating T (°C)", value=22.0, key="u_qt") + 273.15
+    qp = q3.number_input("Operating P (bar abs)", min_value=0.01, value=1.01325, format="%.5f", key="u_qp") * 1e5
+    qn = actual_m3_h_to_normal_m3_h(qa, temperature_K=qt, pressure_Pa=qp)
+    qa_round = normal_m3_h_to_actual_m3_h(qn, temperature_K=qt, pressure_Pa=qp)
+    st.write(f"Normal flow = **{qn:.6f} Nm³/h** · round-trip actual flow = **{qa_round:.6f} m³/h**")
+
+
 with lookup_tab:
     st.subheader("Exact pair lookup — Phase 2 remains intact")
     c1, c2, c3 = st.columns(3)
@@ -713,6 +875,9 @@ with quality_tab:
 - Packed-bed pressure drop is explicitly a screening model; GPDC determines flood velocity and percent flood.
 - Kister–Gill pressure drop at flood is retained only as a diagnostic; it does not define percent flood.
 - Foaming, entrainment, distributor/support losses, demisters, fouling and maldistribution are not modeled.
+- Phase 7 keeps unit conversion outside the physics solvers; canonical gas/liquid composition variables remain `y_i` and `x_i`.
+- Normal reporting uses 273.15 K and 101325 Pa; mass-, mole- and carbon-fraction bases are never treated as interchangeable.
+- Multicomponent outlet totals are reconstructed from solved component outlets, never from inlet mixture fractions.
         """
     )
 
@@ -747,10 +912,11 @@ with quality_tab:
     st.success("PHASE4_MASS_TRANSFER_GATE = PASS")
     st.success("PHASE5_COUNTERCURRENT_GATE = PASS")
     st.success("PHASE6_HYDRAULICS_GATE = PASS")
+    st.success("PHASE7_UNITS_COMPOSITION_GATE = PASS")
     st.caption("48 automated tests pass in the packaged Phase 6 source tree.")
 
 st.divider()
 st.caption(
-    "Generic Packed Absorber Simulator V4 · Phase 6 · Generic Packed-Column Hydraulics · "
-    "Next: Phase 7 generic units and composition layer"
+    "Generic Packed Absorber Simulator V4 · Phase 7 · Generic Units & Composition Layer · "
+    "Next: Phase 8 applicability / validity engine"
 )
