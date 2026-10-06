@@ -1,52 +1,68 @@
 # Generic Packed Absorber Simulator V4
 
-## Current development stage: Phase 4 — Generic Onda Mass-Transfer Core
+Current implementation milestone: **Phase 5 — Generic Counter-Current ODE Solver**.
 
-This repository is being built in controlled phases from the locked ACN + VAc / Water / Air reference scrubber model.
+The development sequence preserves the locked V3 reference behavior before
+adding new chemistry or revising correlations.
 
-### Completed gates
+## Implemented
 
-- `PHASE1_DATA_GATE = PASS` — immutable generic data objects and locked reference dataset.
-- `PHASE2_REGISTRY_GATE = PASS` — exact pair registry, lookup and missing-pair safety.
-- `PHASE3_RESOLVER_GATE = PASS` — operating-point property resolution with provenance and precedence.
-- `PHASE4_MASS_TRANSFER_GATE = PASS` — chemistry-independent Onda/two-film coefficient core with V3 intermediate parity.
+1. **Phase 1 — Canonical data objects**
+   - solutes, carrier gases, solvents, packings
+   - gas/liquid transport pairs
+   - equilibrium pairs
+   - source / method / confidence provenance
+2. **Phase 2 — Registry / exact pair lookup**
+   - explicit missing-pair errors
+   - no silent chemical substitution
+3. **Phase 3 — Property resolver**
+   - `USER OVERRIDE > DATABASE > CORRELATION ESTIMATE > MISSING`
+   - operating-point Air / Water / Henry property resolution
+4. **Phase 4 — Generic Onda + two-film core**
+   - common Onda state and wetted area
+   - `kL`, `kG`, `KG`, `m`, absorption factor, HTU/NTU
+   - locked ACN/VAc coefficient parity
+5. **Phase 5 — Generic counter-current solver**
+   - shooting method + `solve_ivp` + Brent root solve
+   - `y_out`, `x_bottom`, component removal
+   - nonzero liquid inlet loading
+   - absorption and desorption without driving-force clamp
+   - profiles and mass-balance / boundary diagnostics
+   - 1–4 independent dilute solutes
 
-### Phase 4 calculation chain
+## Current gates
 
-```text
-Phase 1 data objects
-    ↓
-Phase 2 exact pair registry
-    ↓
-Phase 3 resolved operating-point properties
-    ↓
-Phase 4 common Onda state
-    ↓
-a_e, ReL, ReG, FrL, WeL
-    ↓
-per-solute ScL, ScG, kL, kG, KG, m, A, HTU, NTU
-```
+- `PHASE1_DATA_GATE = PASS`
+- `PHASE2_REGISTRY_GATE = PASS`
+- `PHASE3_RESOLVER_GATE = PASS`
+- `PHASE4_MASS_TRANSFER_GATE = PASS`
+- `PHASE5_COUNTERCURRENT_GATE = PASS`
+- **40 automated tests PASS**
 
-The Phase 4 physics functions receive resolved numeric values and contain no chemical-name special cases.
+## Locked reference
 
-### Streamlit
+`REF_SCRUBBER_2026_10_06`
 
-Run locally with:
+The V4 Phase 5 ACN and VAc outlet mole fractions, liquid-bottom loadings and
+component removals reproduce the locked V3 reference case.
+
+## Streamlit
+
+Entrypoint: `app.py`
+
+Install dependencies from `requirements.txt`, then run:
 
 ```bash
 streamlit run app.py
 ```
 
-The new **Mass Transfer** tab exposes the current Onda/two-film coefficient layer. It intentionally does not show outlet concentration or flooding yet.
+The app now contains a **Counter-Current Solver** tab in addition to the data,
+resolver and mass-transfer inspection tabs.
 
-### Tests
+## Scope boundary
 
-```bash
-PYTHONPATH=. pytest -q
-```
+Phase 5 still does **not** implement concentration-basis reconstruction,
+required-height design, pressure drop or flooding. Those are intentionally kept
+out of the solver until their planned phases.
 
-Current packaged result: **31 passed**.
-
-### Next planned phase
-
-**Phase 5 — Generic counter-current ODE solver**, including non-zero inlet solvent loading and component mass-balance closure.
+Next: **Phase 6 — Generic Hydraulics**.

@@ -1,4 +1,4 @@
-"""Generic Packed Absorber Simulator V4 — Phase 4 generic mass-transfer core."""
+"""Generic Packed Absorber Simulator V4 — Phase 5 counter-current solver."""
 
 from .models import (
     CarrierGasSpec,
@@ -52,7 +52,32 @@ from .mass_transfer import (
     evaluate_component_from_resolver,
 )
 
+from .countercurrent import (
+    BoundaryConditionSolveError,
+    ComponentBoundaryConditions,
+    ComponentCounterCurrentResult,
+    CounterCurrentSolverError,
+    CounterCurrentSolverOptions,
+    IndependentSolutesResult,
+    InvalidBoundaryCondition,
+    ODEIntegrationError,
+    SolverDiagnostics,
+    solve_component_countercurrent,
+    solve_independent_solutes,
+)
+
 __all__ = [
+    "ComponentBoundaryConditions",
+    "CounterCurrentSolverOptions",
+    "SolverDiagnostics",
+    "ComponentCounterCurrentResult",
+    "IndependentSolutesResult",
+    "CounterCurrentSolverError",
+    "InvalidBoundaryCondition",
+    "BoundaryConditionSolveError",
+    "ODEIntegrationError",
+    "solve_component_countercurrent",
+    "solve_independent_solutes",
     "AbsorberOperatingPoint",
     "CommonOndaState",
     "ComponentMassTransferResult",

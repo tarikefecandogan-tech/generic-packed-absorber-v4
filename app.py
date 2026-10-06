@@ -6,6 +6,7 @@ import streamlit as st
 from generic_absorber_v4 import (
     AbsorberOperatingPoint,
     ComponentPropertyOverrides,
+    ComponentBoundaryConditions,
     MissingPairDataError,
     MissingPropertyError,
     PropertyResolver,
@@ -15,6 +16,7 @@ from generic_absorber_v4 import (
     build_reference_resolver,
     locked_reference_data,
     evaluate_component_from_resolver,
+    solve_component_countercurrent,
 )
 
 st.set_page_config(
@@ -181,13 +183,13 @@ RESOLVER = build_reference_resolver()
 COUNTS = REGISTRY.inventory_counts()
 
 st.title("🧪 Generic Packed Absorber Simulator V4")
-st.caption("Phase 4 — Generic Onda Mass Transfer Core")
+st.caption("Phase 5 — Generic Counter-Current ODE Solver")
 
 st.warning(
-    "Phase 4 now connects resolved properties to the generic Onda + two-film coefficient core. "
-    "It calculates wetted area, kL, kG, KG, m, absorption factor and HTU/NTU. "
-    "Counter-current ODE, outlet concentration, required height, pressure drop and GPDC flooding "
-    "are still NOT connected."
+    "Phase 5 adds the generic counter-current shooting/ODE solver. It now calculates component "
+    "gas outlet mole fraction, liquid-bottom loading, removal and bed profiles, including nonzero "
+    "solvent inlet loading and desorption. Concentration-basis conversion, required height, pressure "
+    "drop and GPDC flooding are still NOT connected."
 )
 
 with st.sidebar:
@@ -196,6 +198,7 @@ with st.sidebar:
     st.success("PHASE2_REGISTRY_GATE = PASS")
     st.success("PHASE3_RESOLVER_GATE = PASS")
     st.success("PHASE4_MASS_TRANSFER_GATE = PASS")
+    st.success("PHASE5_COUNTERCURRENT_GATE = PASS")
     st.metric("Reference ID", REGISTRY.reference_id)
     st.divider()
     st.caption("Resolution precedence")
@@ -209,6 +212,7 @@ with st.sidebar:
     overview_tab,
     resolver_tab,
     mass_transfer_tab,
+    solver_tab,
     lookup_tab,
     solute_tab,
     fluid_tab,
@@ -219,6 +223,7 @@ with st.sidebar:
     "Overview",
     "Property Resolver",
     "Mass Transfer",
+    "Counter-Current Solver",
     "Registry Lookup",
     "Solutes",
     "Carrier & Solvent",
@@ -228,7 +233,7 @@ with st.sidebar:
 ])
 
 with overview_tab:
-    st.subheader("Phase 4 architecture")
+    st.subheader("Phase 5 architecture")
     st.code(
         """Phase 1 immutable data objects
         ↓
@@ -243,8 +248,12 @@ Resolved operating-point values + provenance
 Phase 4 Generic Onda + Two-Film Core
         ↓
 a_e, kL, kG, KG, m, A, HTU, NTU
+        ↓
+Phase 5 Counter-Current BVP Solver
+        ↓
+y_out, x_bottom, removal, profiles, balance diagnostics
 
-No counter-current ODE / outlet / GPDC calculation yet.""",
+No concentration-basis conversion / required-height / GPDC calculation yet.""",
         language="text",
     )
 
@@ -428,9 +437,112 @@ with mass_transfer_tab:
     except Exception as exc:
         st.error(str(exc))
 
+    st.info(
+        "Phase 4 remains the coefficient layer. Phase 5 consumes these coefficients in the separate "
+        "Counter-Current Solver tab."
+    )
+
+with solver_tab:
+    st.subheader("Generic counter-current component solver")
+    st.caption(
+        "Canonical boundary variables are gas mole fraction y and liquid mole fraction x. "
+        "Coordinate: z=0 gas inlet/liquid outlet; z=Z gas outlet/liquid inlet. "
+        "Negative driving force is retained and therefore can represent desorption."
+    )
+
+    ref_y = {
+        "ACN": 0.001964284929935824,
+        "VAc": 9.112428087594802e-05,
+    }
+
+    s1, s2, s3 = st.columns(3)
+    cc_solute = s1.selectbox("Solute", list(REGISTRY.solutes), key="cc_solute")
+    cc_packing = s2.selectbox("Packing", list(REGISTRY.packings), key="cc_packing")
+    cc_temp_C = s3.number_input("Temperature (°C)", value=22.0, step=1.0, key="cc_temp")
+
+    s4, s5, s6 = st.columns(3)
+    cc_d = s4.number_input("Column diameter D (m)", min_value=0.01, value=0.50, step=0.05, key="cc_d")
+    cc_z = s5.number_input("Packed height Z (m)", min_value=0.01, value=1.40, step=0.10, key="cc_z")
+    cc_p_bar = s6.number_input("Pressure (bar abs)", min_value=0.01, value=1.01325, step=0.05, format="%.5f", key="cc_p")
+
+    s7, s8 = st.columns(2)
+    cc_q = s7.number_input("Actual gas flow (m³/h)", min_value=0.001, value=117.53, step=5.0, key="cc_q")
+    cc_l = s8.number_input("Liquid flow (kg/h)", min_value=0.001, value=2500.0, step=50.0, key="cc_l")
+
+    b1, b2 = st.columns(2)
+    default_y = ref_y.get(cc_solute, 1.0e-4)
+    cc_y_in = b1.number_input(
+        "Gas inlet y (mole fraction)", min_value=0.0, max_value=0.999999,
+        value=float(default_y), format="%.10e", key=f"cc_y_{cc_solute}"
+    )
+    cc_x_in = b2.number_input(
+        "Liquid inlet x at z=Z (mole fraction)", min_value=0.0, max_value=0.999999,
+        value=0.0, format="%.10e", key=f"cc_x_{cc_solute}"
+    )
+
+    try:
+        cc_op = AbsorberOperatingPoint(
+            diameter_m=cc_d, packed_height_m=cc_z, gas_actual_m3_h=cc_q,
+            liquid_mass_kg_h=cc_l, temperature_K=cc_temp_C + 273.15,
+            pressure_Pa=cc_p_bar * 1e5,
+        )
+        cc_common, cc_mt = evaluate_component_from_resolver(
+            resolver=RESOLVER, registry=REGISTRY, solute_id=cc_solute,
+            carrier_id="air", solvent_id="water", packing_id=cc_packing, operating=cc_op,
+        )
+        cc_result = solve_component_countercurrent(
+            cc_common, cc_mt, ComponentBoundaryConditions(cc_y_in, cc_x_in)
+        )
+
+        st.success("COUNTER-CURRENT BOUNDARY VALUE SOLVED")
+        r1, r2, r3, r4 = st.columns(4)
+        r1.metric("Gas inlet y", f"{cc_result.gas_inlet_y:.6e}")
+        r2.metric("Gas outlet y", f"{cc_result.gas_outlet_y:.6e}")
+        r3.metric("Liquid bottom x", f"{cc_result.liquid_bottom_x:.6e}")
+        if cc_result.removal_fraction is None:
+            r4.metric("Removal", "N/A")
+        else:
+            r4.metric("Removal", f"{100*cc_result.removal_fraction:.4f}%")
+
+        d = cc_result.diagnostics
+        diag_rows = [
+            ["Mode", d.mode, "—"],
+            ["Boundary closure x(Z)-x_in", d.boundary_error_x, "mole fraction"],
+            ["Gas solute change", d.gas_solute_change_mol_s, "mol/s"],
+            ["Liquid solute change", d.liquid_solute_change_mol_s, "mol/s"],
+            ["Mass-balance error", d.mass_balance_error_mol_s, "mol/s"],
+            ["Relative mass-balance error", d.relative_mass_balance_error, "—"],
+            ["Minimum driving force y-mx", d.min_driving_force_y, "mole fraction"],
+            ["Maximum driving force y-mx", d.max_driving_force_y, "mole fraction"],
+            ["Root iterations", d.root_iterations, "—"],
+            ["ODE function evaluations", d.ode_function_evaluations, "—"],
+        ]
+        st.markdown("### Numerical and physical diagnostics")
+        st.dataframe(pd.DataFrame(diag_rows, columns=["Quantity", "Value", "Unit"]), use_container_width=True, hide_index=True)
+
+        profile = pd.DataFrame({
+            "z (m)": cc_result.z_m,
+            "gas y": cc_result.gas_y_profile,
+            "liquid x": cc_result.liquid_x_profile,
+            "driving force y-mx": cc_result.driving_force_profile_y,
+        }).set_index("z (m)")
+        st.markdown("### Bed profiles")
+        st.line_chart(profile)
+        st.dataframe(profile.reset_index(), use_container_width=True, hide_index=True)
+
+        if d.min_driving_force_y < 0:
+            st.warning("A negative local driving force exists. The solver has not clamped it; local desorption is retained.")
+        st.caption(
+            "ppmv convenience view: y_in = "
+            f"{cc_result.gas_inlet_y*1e6:.3f} ppmv, y_out = {cc_result.gas_outlet_y*1e6:.3f} ppmv. "
+            "The full concentration-basis conversion architecture is intentionally deferred to Phase 7."
+        )
+    except Exception as exc:
+        st.error(str(exc))
+
     st.warning(
-        "These are coefficient/diagnostic results only. No gas outlet, removal percentage, required height, "
-        "pressure drop or flooding prediction is calculated in Phase 4."
+        "Phase 5 solves component y/x profiles only. Total mgVOC/Nm³, mgC/Nm³, required height, "
+        "pressure drop and flooding are not yet part of this solver layer."
     )
 
 with lookup_tab:
@@ -488,7 +600,7 @@ with packing_tab:
     st.dataframe(packing_df(DB), use_container_width=True, hide_index=True)
 
 with quality_tab:
-    st.subheader("Phase 3 resolution rules")
+    st.subheader("Data, mass-transfer and solver rules")
     st.markdown(
         """
 - **User override** has first priority and receives confidence class A for the active case.
@@ -500,6 +612,9 @@ with quality_tab:
 - Reactive / explicitly unsupported equilibrium models are blocked rather than converted to Henry silently.
 - Phase 4 receives resolved numeric properties and performs Onda/two-film calculations without chemical-name branching.
 - The locked V3 coefficient basis is intentionally preserved before any physics revision.
+- Phase 5 solves `y(0)=y_in` and `x(Z)=x_in` by shooting on `x(0)` with `solve_ivp` + Brent root finding.
+- Nonzero solvent inlet loading is supported; negative `y-mx` is not clamped and can represent desorption.
+- Solver diagnostics expose boundary closure and independent gas/liquid solute mass-balance closure.
         """
     )
 
@@ -532,10 +647,11 @@ with quality_tab:
     st.success("PHASE2_REGISTRY_GATE = PASS")
     st.success("PHASE3_RESOLVER_GATE = PASS")
     st.success("PHASE4_MASS_TRANSFER_GATE = PASS")
-    st.caption("23 automated tests pass in the packaged Phase 3 source tree.")
+    st.success("PHASE5_COUNTERCURRENT_GATE = PASS")
+    st.caption("40 automated tests pass in the packaged Phase 5 source tree.")
 
 st.divider()
 st.caption(
-    "Generic Packed Absorber Simulator V4 · Phase 4 · Generic Onda Mass Transfer Core · "
-    "Next: Phase 5 generic counter-current ODE solver"
+    "Generic Packed Absorber Simulator V4 · Phase 5 · Generic Counter-Current ODE Solver · "
+    "Next: Phase 6 generic hydraulics"
 )
