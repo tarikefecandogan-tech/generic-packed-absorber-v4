@@ -1,4 +1,4 @@
-"""Generic Packed Absorber Simulator V4 — Phase 5 counter-current solver."""
+"""Generic Packed Absorber Simulator V4 — Phase 6 generic hydraulics."""
 
 from .models import (
     CarrierGasSpec,
@@ -52,6 +52,23 @@ from .mass_transfer import (
     evaluate_component_from_resolver,
 )
 
+
+from .hydraulics import (
+    FloodingResult,
+    GPDCFloodingSolveError,
+    HydraulicResult,
+    HydraulicsError,
+    InvalidHydraulicInput,
+    PackingFactorResult,
+    PressureDropResult,
+    calculate_flooding,
+    calculate_hydraulics,
+    calculate_pressure_drop,
+    evaluate_hydraulics_from_resolver,
+    gpdc_flood_curve_cp,
+    resolve_packing_factor,
+)
+
 from .countercurrent import (
     BoundaryConditionSolveError,
     ComponentBoundaryConditions,
@@ -67,6 +84,19 @@ from .countercurrent import (
 )
 
 __all__ = [
+    "PackingFactorResult",
+    "PressureDropResult",
+    "FloodingResult",
+    "HydraulicResult",
+    "HydraulicsError",
+    "InvalidHydraulicInput",
+    "GPDCFloodingSolveError",
+    "resolve_packing_factor",
+    "gpdc_flood_curve_cp",
+    "calculate_pressure_drop",
+    "calculate_flooding",
+    "calculate_hydraulics",
+    "evaluate_hydraulics_from_resolver",
     "ComponentBoundaryConditions",
     "CounterCurrentSolverOptions",
     "SolverDiagnostics",

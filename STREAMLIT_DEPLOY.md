@@ -1,19 +1,19 @@
-# Streamlit Community Cloud — Phase 5
+# Streamlit Community Cloud — Phase 6
 
-Upload/replace the **entire Phase 5 package contents** in the existing GitHub
-repository. Do not create a new repository for each phase.
+Update the **existing GitHub repository** with the entire Phase 6 package.
+Do not create a new repository.
 
-The repository root must contain at least:
+Repository root should contain at least:
 
 ```text
 app.py
 requirements.txt
-PHASE5_STATUS.md
+PHASE6_STATUS.md
 generic_absorber_v4/
 tests/
 ```
 
-The package folder must contain:
+Package folder:
 
 ```text
 generic_absorber_v4/
@@ -24,14 +24,11 @@ generic_absorber_v4/
     resolver.py
     mass_transfer.py
     countercurrent.py
+    hydraulics.py
 ```
 
-Important: Phase 5 adds direct NumPy/SciPy runtime dependencies, so make sure the updated `requirements.txt` is also committed. It must include:
-
-```text
-numpy>=1.24,<3
-scipy>=1.11,<2
-```
+Keep the existing `requirements.txt`; Phase 6 uses the NumPy/SciPy dependencies
+already introduced in Phase 5.
 
 Streamlit Community Cloud settings remain:
 
@@ -40,7 +37,7 @@ Streamlit Community Cloud settings remain:
 
 Suggested commit message:
 
-`Phase 5 - generic counter-current ODE solver`
+`Phase 6 - generic packed-column hydraulics`
 
-After Streamlit redeploys, the sidebar should show all five phase gates as PASS
-and a new **Counter-Current Solver** tab should be available.
+After redeploy, the sidebar should show six PASS gates and the new
+**Hydraulics** tab should be visible.

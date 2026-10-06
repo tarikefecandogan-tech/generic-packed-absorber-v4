@@ -16,6 +16,7 @@ from generic_absorber_v4 import (
     build_reference_resolver,
     locked_reference_data,
     evaluate_component_from_resolver,
+    evaluate_hydraulics_from_resolver,
     solve_component_countercurrent,
 )
 
@@ -183,13 +184,13 @@ RESOLVER = build_reference_resolver()
 COUNTS = REGISTRY.inventory_counts()
 
 st.title("🧪 Generic Packed Absorber Simulator V4")
-st.caption("Phase 5 — Generic Counter-Current ODE Solver")
+st.caption("Phase 6 — Generic Packed-Column Hydraulics")
 
 st.warning(
-    "Phase 5 adds the generic counter-current shooting/ODE solver. It now calculates component "
-    "gas outlet mole fraction, liquid-bottom loading, removal and bed profiles, including nonzero "
-    "solvent inlet loading and desorption. Concentration-basis conversion, required height, pressure "
-    "drop and GPDC flooding are still NOT connected."
+    "Phase 6 adds a generic hydraulic layer independent of dilute-solute identity. It calculates "
+    "screening dry/wet packed-bed pressure drop, liquid holdup, GPDC flood velocity and percent flood. "
+    "Kister–Gill pressure drop at flood is retained only as a diagnostic. Concentration-basis conversion "
+    "and required-height design remain outside this phase."
 )
 
 with st.sidebar:
@@ -199,6 +200,7 @@ with st.sidebar:
     st.success("PHASE3_RESOLVER_GATE = PASS")
     st.success("PHASE4_MASS_TRANSFER_GATE = PASS")
     st.success("PHASE5_COUNTERCURRENT_GATE = PASS")
+    st.success("PHASE6_HYDRAULICS_GATE = PASS")
     st.metric("Reference ID", REGISTRY.reference_id)
     st.divider()
     st.caption("Resolution precedence")
@@ -213,6 +215,7 @@ with st.sidebar:
     resolver_tab,
     mass_transfer_tab,
     solver_tab,
+    hydraulics_tab,
     lookup_tab,
     solute_tab,
     fluid_tab,
@@ -224,6 +227,7 @@ with st.sidebar:
     "Property Resolver",
     "Mass Transfer",
     "Counter-Current Solver",
+    "Hydraulics",
     "Registry Lookup",
     "Solutes",
     "Carrier & Solvent",
@@ -233,7 +237,7 @@ with st.sidebar:
 ])
 
 with overview_tab:
-    st.subheader("Phase 5 architecture")
+    st.subheader("Phase 6 architecture")
     st.code(
         """Phase 1 immutable data objects
         ↓
@@ -253,7 +257,11 @@ Phase 5 Counter-Current BVP Solver
         ↓
 y_out, x_bottom, removal, profiles, balance diagnostics
 
-No concentration-basis conversion / required-height / GPDC calculation yet.""",
+Phase 6 Generic Hydraulics
+        ↓
+hL, dry/wet dP, GPDC U_flood, % flood, hydraulic regime
+
+No concentration-basis conversion / required-height design yet.""",
         language="text",
     )
 
@@ -541,9 +549,95 @@ with solver_tab:
         st.error(str(exc))
 
     st.warning(
-        "Phase 5 solves component y/x profiles only. Total mgVOC/Nm³, mgC/Nm³, required height, "
-        "pressure drop and flooding are not yet part of this solver layer."
+        "The counter-current solver remains a component y/x layer. Phase 6 hydraulics is calculated "
+        "separately from carrier/solvent/packing/flow data; concentration-basis conversion and required "
+        "height are still deferred."
     )
+
+with hydraulics_tab:
+    st.subheader("Generic packed-column hydraulics")
+    st.caption(
+        "Hydraulics uses only carrier, solvent, packing and operating conditions. Dilute-solute identity "
+        "does not enter the calculation. Pressure drop is a screening model; GPDC supplies flood capacity."
+    )
+
+    h1, h2, h3 = st.columns(3)
+    hy_packing = h1.selectbox("Packing", list(REGISTRY.packings), key="hy_packing")
+    hy_temp_C = h2.number_input("Temperature (°C)", value=22.0, step=1.0, key="hy_temp")
+    hy_p_bar = h3.number_input("Pressure (bar abs)", min_value=0.01, value=1.01325, step=0.05, format="%.5f", key="hy_p")
+
+    h4, h5, h6, h7 = st.columns(4)
+    hy_d = h4.number_input("Column diameter D (m)", min_value=0.01, value=0.50, step=0.05, key="hy_d")
+    hy_z = h5.number_input("Packed height Z (m)", min_value=0.01, value=1.40, step=0.10, key="hy_z")
+    hy_q = h6.number_input("Actual gas flow (m³/h)", min_value=0.001, value=117.53, step=5.0, key="hy_q")
+    hy_l = h7.number_input("Liquid flow (kg/h)", min_value=0.001, value=2500.0, step=50.0, key="hy_l")
+
+    try:
+        hy_op = AbsorberOperatingPoint(
+            diameter_m=hy_d, packed_height_m=hy_z, gas_actual_m3_h=hy_q,
+            liquid_mass_kg_h=hy_l, temperature_K=hy_temp_C + 273.15,
+            pressure_Pa=hy_p_bar * 1e5,
+        )
+        hy_common, hy = evaluate_hydraulics_from_resolver(
+            resolver=RESOLVER, registry=REGISTRY, carrier_id="air", solvent_id="water",
+            packing_id=hy_packing, operating=hy_op,
+        )
+        dp = hy.pressure_drop
+        fl = hy.flooding
+        st.success("GENERIC HYDRAULICS CALCULATION READY")
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Wet ΔP", f"{dp.wet_pressure_drop_mbar_m:.5f} mbar/m")
+        m2.metric("Total packed ΔP", f"{dp.total_pressure_drop_Pa:.4f} Pa")
+        m3.metric("Flood velocity", f"{fl.flood_velocity_m_s:.4f} m/s")
+        m4.metric("Percent flood", f"{fl.flooding_percent:.2f}%")
+
+        if fl.flooding_percent >= 100:
+            st.error(fl.hydraulic_regime)
+        elif fl.flooding_percent >= 90:
+            st.warning(fl.hydraulic_regime)
+        else:
+            st.info(fl.hydraulic_regime)
+
+        st.markdown("### Pressure-drop screening")
+        dp_rows = [
+            ["Gas superficial velocity", hy_common.gas_superficial_velocity_m_s, "m/s"],
+            ["Hydraulic Re_L", dp.Re_L_hydraulic, "—"],
+            ["Liquid holdup hL", dp.liquid_holdup_fraction, "bed fraction"],
+            ["Dry pressure drop", dp.dry_pressure_drop_Pa_m, "Pa/m"],
+            ["Wet pressure drop", dp.wet_pressure_drop_Pa_m, "Pa/m"],
+            ["Wet pressure drop", dp.wet_pressure_drop_mbar_m, "mbar/m"],
+            ["Total packed pressure drop", dp.total_pressure_drop_Pa, "Pa"],
+        ]
+        st.dataframe(pd.DataFrame(dp_rows, columns=["Quantity", "Value", "Unit"]), use_container_width=True, hide_index=True)
+
+        st.markdown("### GPDC flooding capacity")
+        flood_rows = [
+            ["Operating gas velocity", fl.gas_superficial_velocity_m_s, "m/s"],
+            ["Flood gas velocity", fl.flood_velocity_m_s, "m/s"],
+            ["Flood gas mass flux", fl.flood_gas_mass_flux_kg_m2_s, "kg/m²·s"],
+            ["F_LV at flood", fl.F_LV_flood, "—"],
+            ["CP at flood", fl.CP_flood, "—"],
+            ["Packing factor", fl.packing_factor_ft_inv, "ft⁻¹"],
+            ["Packing-factor basis", fl.packing_factor_basis, "—"],
+            ["Packing factor estimated", fl.packing_factor_estimated, "—"],
+            ["Liquid kinematic viscosity", fl.liquid_kinematic_viscosity_cSt, "cSt"],
+            ["Percent flood", fl.flooding_percent, "%"],
+            ["GPDC correlation range valid", fl.gpdc_valid, "—"],
+        ]
+        st.dataframe(pd.DataFrame(flood_rows, columns=["Quantity", "Value", "Unit"]), use_container_width=True, hide_index=True)
+
+        st.markdown("### Flooding pressure-drop diagnostic")
+        st.write(
+            f"Kister–Gill diagnostic: **{fl.flood_pressure_drop_mbar_m:.4f} mbar/m** at flood. "
+            f"Current wet ΔP / diagnostic flood ΔP = **{hy.pressure_drop_ratio_to_flood:.6f}**."
+        )
+        st.caption(
+            "This pressure-drop-at-flood value is diagnostic only. Percent flood is defined from "
+            "operating superficial gas velocity divided by GPDC flood velocity, not from a ΔP ratio."
+        )
+    except Exception as exc:
+        st.error(str(exc))
 
 with lookup_tab:
     st.subheader("Exact pair lookup — Phase 2 remains intact")
@@ -615,6 +709,10 @@ with quality_tab:
 - Phase 5 solves `y(0)=y_in` and `x(Z)=x_in` by shooting on `x(0)` with `solve_ivp` + Brent root finding.
 - Nonzero solvent inlet loading is supported; negative `y-mx` is not clamped and can represent desorption.
 - Solver diagnostics expose boundary closure and independent gas/liquid solute mass-balance closure.
+- Phase 6 hydraulics depends on bulk carrier/solvent properties, packing and flows—not dilute-solute identity.
+- Packed-bed pressure drop is explicitly a screening model; GPDC determines flood velocity and percent flood.
+- Kister–Gill pressure drop at flood is retained only as a diagnostic; it does not define percent flood.
+- Foaming, entrainment, distributor/support losses, demisters, fouling and maldistribution are not modeled.
         """
     )
 
@@ -648,10 +746,11 @@ with quality_tab:
     st.success("PHASE3_RESOLVER_GATE = PASS")
     st.success("PHASE4_MASS_TRANSFER_GATE = PASS")
     st.success("PHASE5_COUNTERCURRENT_GATE = PASS")
-    st.caption("40 automated tests pass in the packaged Phase 5 source tree.")
+    st.success("PHASE6_HYDRAULICS_GATE = PASS")
+    st.caption("48 automated tests pass in the packaged Phase 6 source tree.")
 
 st.divider()
 st.caption(
-    "Generic Packed Absorber Simulator V4 · Phase 5 · Generic Counter-Current ODE Solver · "
-    "Next: Phase 6 generic hydraulics"
+    "Generic Packed Absorber Simulator V4 · Phase 6 · Generic Packed-Column Hydraulics · "
+    "Next: Phase 7 generic units and composition layer"
 )
