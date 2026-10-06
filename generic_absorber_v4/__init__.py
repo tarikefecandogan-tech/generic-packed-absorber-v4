@@ -1,4 +1,4 @@
-"""Generic Packed Absorber Simulator V4 — Phase 7 generic units and composition."""
+"""Generic Packed Absorber Simulator V4 — Phase 8 applicability and validity engine."""
 
 from .models import (
     CarrierGasSpec,
@@ -83,6 +83,19 @@ from .countercurrent import (
     solve_independent_solutes,
 )
 
+
+from .applicability import (
+    ApplicabilityCase,
+    ApplicabilityIssue,
+    ApplicabilityReport,
+    ConfidenceLevel,
+    ConfidenceSummary,
+    IssueSeverity,
+    ReadinessStatus,
+    assess_post_applicability,
+    assess_pre_applicability,
+)
+
 from .units import (
     CompositionFractionBasis,
     ComponentGasReport,
@@ -107,6 +120,15 @@ from .units import (
 )
 
 __all__ = [
+    "ApplicabilityCase",
+    "ApplicabilityIssue",
+    "ApplicabilityReport",
+    "ConfidenceLevel",
+    "ConfidenceSummary",
+    "IssueSeverity",
+    "ReadinessStatus",
+    "assess_pre_applicability",
+    "assess_post_applicability",
     "CompositionFractionBasis",
     "ComponentGasReport",
     "ConcentrationTarget",

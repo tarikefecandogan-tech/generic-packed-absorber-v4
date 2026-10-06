@@ -5,6 +5,10 @@ import streamlit as st
 
 from generic_absorber_v4 import (
     AbsorberOperatingPoint,
+    ApplicabilityCase,
+    ReadinessStatus,
+    assess_pre_applicability,
+    assess_post_applicability,
     ComponentPropertyOverrides,
     ComponentBoundaryConditions,
     MissingPairDataError,
@@ -18,6 +22,7 @@ from generic_absorber_v4 import (
     evaluate_component_from_resolver,
     evaluate_hydraulics_from_resolver,
     solve_component_countercurrent,
+    solve_independent_solutes,
     CompositionFractionBasis,
     GasConcentrationBasis,
     actual_m3_h_to_normal_m3_h,
@@ -196,13 +201,12 @@ RESOLVER = build_reference_resolver()
 COUNTS = REGISTRY.inventory_counts()
 
 st.title("🧪 Generic Packed Absorber Simulator V4")
-st.caption("Phase 7 — Generic Units & Composition Layer")
+st.caption("Phase 8 — Applicability, Validity & Confidence Engine")
 
 st.warning(
-    "Phase 7 adds the generic units/composition boundary around the existing physics. The solvers still use "
-    "canonical gas mole fractions y_i and liquid mole fractions x_i; ppmv, mgVOC/Nm³, mgC/Nm³, mixture "
-    "fraction bases and liquid mg/L are converted only at the input/reporting layer. Required-height design "
-    "remains outside this phase."
+    "Phase 8 adds an explicit applicability/validity layer around the Phase 1–7 physics. Critical missing "
+    "data and unsupported physics are blocked; extrapolation, data-quality limits, Onda screening ranges, "
+    "mass-balance closure and flooding are reported visibly. Required-height design remains outside this phase."
 )
 
 with st.sidebar:
@@ -214,6 +218,7 @@ with st.sidebar:
     st.success("PHASE5_COUNTERCURRENT_GATE = PASS")
     st.success("PHASE6_HYDRAULICS_GATE = PASS")
     st.success("PHASE7_UNITS_COMPOSITION_GATE = PASS")
+    st.success("PHASE8_APPLICABILITY_GATE = PASS")
     st.metric("Reference ID", REGISTRY.reference_id)
     st.divider()
     st.caption("Resolution precedence")
@@ -230,6 +235,7 @@ with st.sidebar:
     solver_tab,
     hydraulics_tab,
     units_tab,
+    applicability_tab,
     lookup_tab,
     solute_tab,
     fluid_tab,
@@ -243,6 +249,7 @@ with st.sidebar:
     "Counter-Current Solver",
     "Hydraulics",
     "Units & Composition",
+    "Applicability & Validity",
     "Registry Lookup",
     "Solutes",
     "Carrier & Solvent",
@@ -252,7 +259,7 @@ with st.sidebar:
 ])
 
 with overview_tab:
-    st.subheader("Phase 6 architecture")
+    st.subheader("Phase 8 architecture")
     st.code(
         """Phase 1 immutable data objects
         ↓
@@ -282,6 +289,14 @@ ppmv / mgVOC/Nm³ / mgC/Nm³ ↔ canonical y_i
 liquid mg/L ↔ canonical x_i
 actual ↔ normal gas flow
 mixture fraction basis handling + multicomponent outlet reconstruction
+        ↓
+Phase 8 Applicability / Validity / Confidence
+        ↓
+PRE: data + physics + model-domain gate
+POST: Onda ranges + ODE closure + driving force + flooding
+        ↓
+READY / READY_WITH_WARNINGS / OUTSIDE_RECOMMENDED_RANGE
+INSUFFICIENT_DATA / UNSUPPORTED_PHYSICS / NUMERICAL_FAILURE
 
 No required-height design yet.""",
         language="text",
@@ -801,6 +816,182 @@ with units_tab:
     st.write(f"Normal flow = **{qn:.6f} Nm³/h** · round-trip actual flow = **{qa_round:.6f} m³/h**")
 
 
+
+with applicability_tab:
+    st.subheader("Applicability, validity & confidence engine")
+    st.caption(
+        "This tab runs a pre-solver domain/data gate, then—when allowed—the Phase 3–7 property, "
+        "mass-transfer, counter-current and hydraulic calculations, followed by a post-solver validity gate."
+    )
+
+    st.markdown("### Case definition")
+    a1, a2, a3 = st.columns(3)
+    ap_temp_C = a1.number_input("Temperature (°C)", value=22.0, step=1.0, key="ap_temp")
+    ap_p_bar = a2.number_input("Pressure (bar abs)", min_value=0.01, value=1.01325, step=0.05, format="%.5f", key="ap_p")
+    ap_d = a3.number_input("Column diameter D (m)", min_value=0.01, value=0.50, step=0.05, key="ap_d")
+
+    a4, a5, a6 = st.columns(3)
+    ap_z = a4.number_input("Packed height Z (m)", min_value=0.01, value=1.40, step=0.10, key="ap_z")
+    ap_q = a5.number_input("Actual gas flow (m³/h)", min_value=0.001, value=117.53, step=5.0, key="ap_q")
+    ap_l = a6.number_input("Liquid flow (kg/h)", min_value=0.001, value=2500.0, step=50.0, key="ap_l")
+
+    st.markdown("### Canonical component boundary conditions")
+    b1, b2, b3, b4 = st.columns(4)
+    ap_y_acn = b1.number_input("ACN y_in", min_value=0.0, max_value=0.999999, value=1.964284929935824e-3, format="%.10e", key="ap_y_acn")
+    ap_x_acn = b2.number_input("ACN x_in", min_value=0.0, max_value=0.999999, value=0.0, format="%.10e", key="ap_x_acn")
+    ap_y_vac = b3.number_input("VAc y_in", min_value=0.0, max_value=0.999999, value=9.112428087594802e-5, format="%.10e", key="ap_y_vac")
+    ap_x_vac = b4.number_input("VAc x_in", min_value=0.0, max_value=0.999999, value=0.0, format="%.10e", key="ap_x_vac")
+
+    st.markdown("### Model-domain flags")
+    f1, f2, f3, f4 = st.columns(4)
+    ap_reactive = f1.checkbox("Reactive absorption", value=False, key="ap_reactive")
+    ap_noniso = f2.checkbox("Non-isothermal case", value=False, key="ap_noniso")
+    ap_volatile = f3.checkbox("Material solvent evaporation expected", value=False, key="ap_volatile")
+    ap_foaming = f4.checkbox("Foaming expected", value=False, key="ap_foaming")
+
+    ap_op = AbsorberOperatingPoint(
+        diameter_m=ap_d,
+        packed_height_m=ap_z,
+        gas_actual_m3_h=ap_q,
+        liquid_mass_kg_h=ap_l,
+        temperature_K=ap_temp_C + 273.15,
+        pressure_Pa=ap_p_bar * 1e5,
+    )
+    ap_case = ApplicabilityCase(
+        operating=ap_op,
+        solute_ids=("ACN", "VAc"),
+        carrier_id="air",
+        solvent_id="water",
+        packing_id="25mm_metal_pall_ring",
+        gas_inlet_y={"ACN": ap_y_acn, "VAc": ap_y_vac},
+        liquid_inlet_x={"ACN": ap_x_acn, "VAc": ap_x_vac},
+        reactive_system=ap_reactive,
+        physical_absorption=not ap_reactive,
+        isothermal=not ap_noniso,
+        solvent_evaporation_expected=ap_volatile,
+        foaming_expected=ap_foaming,
+    )
+
+    pre_report = assess_pre_applicability(REGISTRY, ap_case)
+    st.markdown("### Pre-solver gate")
+    if pre_report.status == ReadinessStatus.READY:
+        st.success(f"PRE STATUS: {pre_report.status.value}")
+    elif pre_report.can_run:
+        st.warning(f"PRE STATUS: {pre_report.status.value}")
+    else:
+        st.error(f"PRE STATUS: {pre_report.status.value}")
+
+    if pre_report.issues:
+        st.dataframe(pd.DataFrame([
+            {
+                "Severity": i.severity.value,
+                "Code": i.code,
+                "Scope": i.scope,
+                "Outside recommended range": "Yes" if i.outside_recommended_range else "No",
+                "Message": i.message,
+            }
+            for i in pre_report.issues
+        ]), use_container_width=True, hide_index=True)
+
+    if pre_report.can_run:
+        resolved_map = {}
+        transfer_map = {}
+        solved_all = None
+        hyd_result = None
+        common_ap = None
+        numerical_failure = None
+        try:
+            for sid in ("ACN", "VAc"):
+                resolved_map[sid] = RESOLVER.resolve_component_properties(
+                    sid, "air", "water", ap_op.temperature_K, ap_op.pressure_Pa
+                )
+                common_i, transfer_i = evaluate_component_from_resolver(
+                    resolver=RESOLVER,
+                    registry=REGISTRY,
+                    solute_id=sid,
+                    carrier_id="air",
+                    solvent_id="water",
+                    packing_id="25mm_metal_pall_ring",
+                    operating=ap_op,
+                )
+                if common_ap is None:
+                    common_ap = common_i
+                transfer_map[sid] = transfer_i
+
+            boundaries = {
+                "ACN": ComponentBoundaryConditions(gas_inlet_y=ap_y_acn, liquid_inlet_x=ap_x_acn),
+                "VAc": ComponentBoundaryConditions(gas_inlet_y=ap_y_vac, liquid_inlet_x=ap_x_vac),
+            }
+            solved_all = solve_independent_solutes(common_ap, transfer_map, boundaries)
+            _, hyd_result = evaluate_hydraulics_from_resolver(
+                resolver=RESOLVER,
+                registry=REGISTRY,
+                carrier_id="air",
+                solvent_id="water",
+                packing_id="25mm_metal_pall_ring",
+                operating=ap_op,
+            )
+        except Exception as exc:
+            numerical_failure = f"{type(exc).__name__}: {exc}"
+
+        final_report = assess_post_applicability(
+            pre_report,
+            resolved_components=resolved_map,
+            common=common_ap,
+            transfer_results=transfer_map,
+            solver_results=solved_all,
+            hydraulics=hyd_result,
+            packing=REGISTRY.get_packing("25mm_metal_pall_ring"),
+            numerical_failure=numerical_failure,
+        )
+
+        st.markdown("### Final applicability verdict")
+        if final_report.status == ReadinessStatus.READY:
+            st.success(f"FINAL STATUS: {final_report.status.value}")
+        elif final_report.status in (ReadinessStatus.READY_WITH_WARNINGS, ReadinessStatus.OUTSIDE_RECOMMENDED_RANGE):
+            st.warning(f"FINAL STATUS: {final_report.status.value}")
+        else:
+            st.error(f"FINAL STATUS: {final_report.status.value}")
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Thermodynamics confidence", final_report.confidence.thermodynamics.value)
+        c2.metric("Mass-transfer confidence", final_report.confidence.mass_transfer.value)
+        c3.metric("Hydraulics confidence", final_report.confidence.hydraulics.value)
+        c4.metric("Overall confidence", final_report.confidence.overall.value)
+
+        st.dataframe(pd.DataFrame([
+            {
+                "Severity": i.severity.value,
+                "Code": i.code,
+                "Scope": i.scope,
+                "Outside recommended range": "Yes" if i.outside_recommended_range else "No",
+                "Message": i.message,
+            }
+            for i in final_report.issues
+        ]), use_container_width=True, hide_index=True)
+
+        if solved_all is not None:
+            st.markdown("### Solver health snapshot")
+            rows = []
+            for sid, rr in solved_all.components.items():
+                rows.append({
+                    "Solute": sid,
+                    "y_out": rr.gas_outlet_y,
+                    "x_bottom": rr.liquid_bottom_x,
+                    "Removal (%)": None if rr.removal_fraction is None else 100*rr.removal_fraction,
+                    "Relative mass-balance error": rr.diagnostics.relative_mass_balance_error,
+                    "Min driving force y-mx": rr.diagnostics.min_driving_force_y,
+                })
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+        if hyd_result is not None:
+            st.caption(
+                f"Hydraulics: {hyd_result.flooding.flooding_percent:.2f}% flood · "
+                f"{hyd_result.flooding.hydraulic_regime} · "
+                f"wet ΔP={hyd_result.pressure_drop.wet_pressure_drop_mbar_m:.5f} mbar/m"
+            )
+    else:
+        st.info("Physics calculation is intentionally not launched because the pre-solver gate contains a blocking issue.")
+
 with lookup_tab:
     st.subheader("Exact pair lookup — Phase 2 remains intact")
     c1, c2, c3 = st.columns(3)
@@ -878,6 +1069,9 @@ with quality_tab:
 - Phase 7 keeps unit conversion outside the physics solvers; canonical gas/liquid composition variables remain `y_i` and `x_i`.
 - Normal reporting uses 273.15 K and 101325 Pa; mass-, mole- and carbon-fraction bases are never treated as interchangeable.
 - Multicomponent outlet totals are reconstructed from solved component outlets, never from inlet mixture fractions.
+- Phase 8 separates pre-solver data/physics readiness from post-solver numerical/correlation/hydraulic validity.
+- BLOCK / WARNING / INFO issues are explicit; confidence is categorical rather than a fabricated percentage.
+- Local negative driving force is reported as physical desorption, while numerical mass-balance/boundary failures receive a distinct NUMERICAL_FAILURE state.
         """
     )
 
@@ -913,10 +1107,11 @@ with quality_tab:
     st.success("PHASE5_COUNTERCURRENT_GATE = PASS")
     st.success("PHASE6_HYDRAULICS_GATE = PASS")
     st.success("PHASE7_UNITS_COMPOSITION_GATE = PASS")
-    st.caption("48 automated tests pass in the packaged Phase 6 source tree.")
+    st.success("PHASE8_APPLICABILITY_GATE = PASS")
+    st.caption("76 automated tests pass in the packaged Phase 8 source tree.")
 
 st.divider()
 st.caption(
-    "Generic Packed Absorber Simulator V4 · Phase 7 · Generic Units & Composition Layer · "
-    "Next: Phase 8 applicability / validity engine"
+    "Generic Packed Absorber Simulator V4 · Phase 8 · Applicability, Validity & Confidence Engine · "
+    "Next: Phase 9 full V3 parity gate"
 )

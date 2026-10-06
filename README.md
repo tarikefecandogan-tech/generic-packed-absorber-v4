@@ -1,6 +1,6 @@
 # Generic Packed Absorber Simulator V4
 
-Current implementation milestone: **Phase 7 — Generic Units & Composition Layer**.
+Current implementation milestone: **Phase 8 — Applicability, Validity & Confidence Engine**.
 
 The development sequence preserves the locked V3 reference behavior before
 adding new chemistry or revising correlations.
@@ -28,15 +28,16 @@ adding new chemistry or revising correlations.
    - liquid holdup and screening dry/wet pressure drop
    - GPDC flood velocity / percent flood / hydraulic regime
    - empirical packing factor with visible geometric fallback
-   - Kister–Gill pressure-drop-at-flood diagnostic
 7. **Phase 7 — Generic units & composition**
-   - canonical solver variables remain `y_i` and `x_i`
-   - ppmv / mgVOC/Nm³ / mgC/Nm³ conversion
-   - mole-, VOC-mass- and carbon-mass fraction handling
-   - component-by-component or total-mixture input
-   - dilute liquid mg/L ↔ x conversion
-   - actual ↔ normal gas-flow conversion
-   - multicomponent outlet reconstruction and basis-dependent removal reporting
+   - ppmv / mgVOC/Nm³ / mgC/Nm³ ↔ canonical `y_i`
+   - liquid mg/L ↔ canonical `x_i`
+   - mixture fraction-basis handling and outlet reconstruction
+8. **Phase 8 — Applicability / validity / confidence**
+   - pre-solver data and physics-domain gate
+   - post-solver Onda / ODE / driving-force / hydraulic checks
+   - `BLOCK`, `WARNING`, `INFO` issue model
+   - explicit readiness states and categorical confidence
+   - weakest-link overall confidence
 
 ## Current gates
 
@@ -47,16 +48,18 @@ adding new chemistry or revising correlations.
 - `PHASE5_COUNTERCURRENT_GATE = PASS`
 - `PHASE6_HYDRAULICS_GATE = PASS`
 - `PHASE7_UNITS_COMPOSITION_GATE = PASS`
-- **62 automated tests PASS**
+- `PHASE8_APPLICABILITY_GATE = PASS`
+- **76 automated tests PASS**
 
 ## Locked reference
 
 `REF_SCRUBBER_2026_10_06`
 
-Phase 7 reproduces the locked reference feed and outlet in all three reporting
-bases. The locked 5000 mgVOC/Nm³ feed is 2055.40921081 ppmv and
-3353.13446738 mgC/Nm³. The locked solved outlet is 106.622281367 mgVOC/Nm³,
-29.2909820172 ppmv and 60.6459573478 mgC/Nm³.
+The locked V3 numerical results remain unchanged. Phase 8 adds interpretation,
+not a new absorption correlation. The reference case passes the pre-solver gate
+as `READY` and the final gate as `READY_WITH_WARNINGS`, with overall confidence
+`MODERATE`. The warnings expose the fact that the legacy fixed DG/DL values do
+not carry an explicit original reference state in the locked V3 source.
 
 ## Streamlit
 
@@ -66,17 +69,17 @@ Entrypoint: `app.py`
 streamlit run app.py
 ```
 
-The application now includes a **Units & Composition** tab in addition to the
-resolver, mass-transfer, counter-current and hydraulics views.
+The application now includes an **Applicability & Validity** tab. It can run the
+whole existing reference calculation chain and shows the pre-gate, final verdict,
+confidence by domain and individual engineering issues.
 
 ## Scope boundary
 
-Phase 7 is a conversion/reporting layer. It does **not** alter Onda, two-film,
-ODE or GPDC equations. Normal reporting uses 273.15 K and 101325 Pa. Fractions
-are not silently normalized and outlet mixture composition is never inferred
-from inlet fractions.
+Phase 8 does not add reactive absorption, non-isothermal energy balances,
+solvent evaporation, foaming corrections or coupled nonideal multicomponent VLE.
+Those cases are now explicitly identified instead of being silently treated as
+supported physics.
 
-Required-height design and full applicability/validity classification remain
-outside this phase.
+Required-height design is still outside the current implementation.
 
-Next: **Phase 8 — Applicability / Validity Engine**.
+Next: **Phase 9 — Full V3 Parity Gate**.
