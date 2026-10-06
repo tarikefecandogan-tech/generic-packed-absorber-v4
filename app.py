@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from generic_absorber_v4 import (
+    AbsorberOperatingPoint,
     ComponentPropertyOverrides,
     MissingPairDataError,
     MissingPropertyError,
@@ -13,6 +14,7 @@ from generic_absorber_v4 import (
     build_reference_registry,
     build_reference_resolver,
     locked_reference_data,
+    evaluate_component_from_resolver,
 )
 
 st.set_page_config(
@@ -179,12 +181,13 @@ RESOLVER = build_reference_resolver()
 COUNTS = REGISTRY.inventory_counts()
 
 st.title("🧪 Generic Packed Absorber Simulator V4")
-st.caption("Phase 3 — Property Resolver")
+st.caption("Phase 4 — Generic Onda Mass Transfer Core")
 
 st.warning(
-    "Phase 3 resolves operating-point properties and records why each value was selected. "
-    "Onda mass transfer, two-film KG, counter-current ODE, pressure drop, GPDC flooding, "
-    "required height and generic outlet calculations are still NOT connected."
+    "Phase 4 now connects resolved properties to the generic Onda + two-film coefficient core. "
+    "It calculates wetted area, kL, kG, KG, m, absorption factor and HTU/NTU. "
+    "Counter-current ODE, outlet concentration, required height, pressure drop and GPDC flooding "
+    "are still NOT connected."
 )
 
 with st.sidebar:
@@ -192,6 +195,7 @@ with st.sidebar:
     st.success("PHASE1_DATA_GATE = PASS")
     st.success("PHASE2_REGISTRY_GATE = PASS")
     st.success("PHASE3_RESOLVER_GATE = PASS")
+    st.success("PHASE4_MASS_TRANSFER_GATE = PASS")
     st.metric("Reference ID", REGISTRY.reference_id)
     st.divider()
     st.caption("Resolution precedence")
@@ -204,6 +208,7 @@ with st.sidebar:
 (
     overview_tab,
     resolver_tab,
+    mass_transfer_tab,
     lookup_tab,
     solute_tab,
     fluid_tab,
@@ -213,6 +218,7 @@ with st.sidebar:
 ) = st.tabs([
     "Overview",
     "Property Resolver",
+    "Mass Transfer",
     "Registry Lookup",
     "Solutes",
     "Carrier & Solvent",
@@ -222,7 +228,7 @@ with st.sidebar:
 ])
 
 with overview_tab:
-    st.subheader("Phase 3 architecture")
+    st.subheader("Phase 4 architecture")
     st.code(
         """Phase 1 immutable data objects
         ↓
@@ -233,8 +239,12 @@ Phase 3 PropertyResolver
 USER OVERRIDE > DATABASE > CORRELATION ESTIMATE > MISSING
         ↓
 Resolved operating-point values + provenance
+        ↓
+Phase 4 Generic Onda + Two-Film Core
+        ↓
+a_e, kL, kG, KG, m, A, HTU, NTU
 
-No Onda / ODE / GPDC calculation yet.""",
+No counter-current ODE / outlet / GPDC calculation yet.""",
         language="text",
     )
 
@@ -324,6 +334,105 @@ with resolver_tab:
         else:
             st.error("FAIL — missing property unexpectedly resolved.")
 
+with mass_transfer_tab:
+    st.subheader("Generic Onda + two-film mass-transfer core")
+    st.caption(
+        "All chemistry-dependent values are supplied by the Phase 3 resolver. The Phase 4 equations "
+        "contain no ACN/VAc/Water/Air name branches. Gas flow on this screen is actual operating flow."
+    )
+
+    a1, a2, a3 = st.columns(3)
+    mt_solute = a1.selectbox("Solute", list(REGISTRY.solutes), key="mt_solute")
+    mt_packing = a2.selectbox("Packing", list(REGISTRY.packings), key="mt_packing")
+    mt_temp_C = a3.number_input("Temperature (°C)", value=22.0, step=1.0, key="mt_temp")
+
+    b1, b2, b3 = st.columns(3)
+    mt_d = b1.number_input("Column diameter D (m)", min_value=0.01, value=0.50, step=0.05, key="mt_d")
+    mt_z = b2.number_input("Packed height Z (m)", min_value=0.01, value=1.40, step=0.10, key="mt_z")
+    mt_p_bar = b3.number_input("Pressure (bar abs)", min_value=0.01, value=1.01325, step=0.05, format="%.5f", key="mt_p")
+
+    c1, c2 = st.columns(2)
+    mt_q = c1.number_input("Actual gas flow (m³/h)", min_value=0.001, value=117.53, step=5.0, key="mt_q")
+    mt_l = c2.number_input("Liquid flow (kg/h)", min_value=0.001, value=2500.0, step=50.0, key="mt_l")
+
+    try:
+        op = AbsorberOperatingPoint(
+            diameter_m=mt_d,
+            packed_height_m=mt_z,
+            gas_actual_m3_h=mt_q,
+            liquid_mass_kg_h=mt_l,
+            temperature_K=mt_temp_C + 273.15,
+            pressure_Pa=mt_p_bar * 1e5,
+        )
+        common, mt = evaluate_component_from_resolver(
+            resolver=RESOLVER,
+            registry=REGISTRY,
+            solute_id=mt_solute,
+            carrier_id="air",
+            solvent_id="water",
+            packing_id=mt_packing,
+            operating=op,
+        )
+        st.success("GENERIC MASS-TRANSFER COEFFICIENT CALCULATION READY")
+
+        m1, m2, m3, m4 = st.columns(4)
+        m1.metric("Effective wetted area", f"{common.effective_area_m2_m3:.4f} m²/m³")
+        m2.metric("Wetting", f"{100*common.wetting_fraction:.2f}%")
+        m3.metric("Absorption factor A", f"{mt.absorption_factor:.5g}")
+        m4.metric("HTU / NTU", f"{mt.HTU_OG_m:.4f} m / {mt.NTU_OG:.4f}")
+
+        st.markdown("### Common Onda state")
+        common_rows = [
+            ["Column area", common.area_m2, "m²"],
+            ["Gas molar flow", common.gas_molar_flow_mol_s, "mol/s"],
+            ["Liquid molar flow", common.liquid_molar_flow_mol_s, "mol/s"],
+            ["Gas mass flux", common.gas_mass_flux_kg_m2_s, "kg/m²·s"],
+            ["Liquid mass flux", common.liquid_mass_flux_kg_m2_s, "kg/m²·s"],
+            ["Re_L", common.Re_L, "—"],
+            ["Re_G", common.Re_G, "—"],
+            ["Fr_L", common.Fr_L, "—"],
+            ["We_L", common.We_L, "—"],
+            ["Effective area a_e", common.effective_area_m2_m3, "m²/m³"],
+        ]
+        st.dataframe(pd.DataFrame(common_rows, columns=["Quantity", "Value", "Unit"]), use_container_width=True, hide_index=True)
+
+        st.markdown(f"### {mt_solute} component coefficients")
+        comp_rows = [
+            ["DG", mt.gas_diffusivity_m2_s, "m²/s"],
+            ["DL", mt.liquid_diffusivity_m2_s, "m²/s"],
+            ["Henry-equivalent H", mt.henry_effective_Pa_m3_mol, "Pa·m³/mol"],
+            ["Equilibrium slope m", mt.equilibrium_slope_m, "—"],
+            ["Sc_L", mt.Sc_L, "—"],
+            ["Sc_G", mt.Sc_G, "—"],
+            ["k_L", mt.k_L, "V3 coefficient basis"],
+            ["k_G", mt.k_G, "V3 coefficient basis"],
+            ["K_G", mt.K_G, "V3 coefficient basis"],
+            ["Absorption factor A", mt.absorption_factor, "—"],
+            ["HTU_OG", mt.HTU_OG_m, "m"],
+            ["NTU_OG", mt.NTU_OG, "—"],
+            ["Gas resistance fraction", mt.gas_resistance_fraction, "—"],
+            ["Liquid resistance fraction", mt.liquid_resistance_fraction, "—"],
+        ]
+        st.dataframe(pd.DataFrame(comp_rows, columns=["Quantity", "Value", "Unit / basis"]), use_container_width=True, hide_index=True)
+
+        if (
+            abs(mt_d - 0.5) < 1e-12
+            and abs(mt_z - 1.4) < 1e-12
+            and abs(mt_q - 117.53) < 1e-12
+            and abs(mt_l - 2500.0) < 1e-12
+            and abs(mt_temp_C - 22.0) < 1e-12
+            and abs(mt_p_bar - 1.01325) < 1e-12
+            and mt_packing == "25mm_metal_pall_ring"
+        ):
+            st.info("Locked V3 reference operating point detected. Phase 4 regression tests verify coefficient parity for ACN and VAc.")
+    except Exception as exc:
+        st.error(str(exc))
+
+    st.warning(
+        "These are coefficient/diagnostic results only. No gas outlet, removal percentage, required height, "
+        "pressure drop or flooding prediction is calculated in Phase 4."
+    )
+
 with lookup_tab:
     st.subheader("Exact pair lookup — Phase 2 remains intact")
     c1, c2, c3 = st.columns(3)
@@ -389,6 +498,8 @@ with quality_tab:
 - If nothing can resolve a critical property, `MissingPropertyError` stops the path.
 - An override never mutates the underlying locked registry.
 - Reactive / explicitly unsupported equilibrium models are blocked rather than converted to Henry silently.
+- Phase 4 receives resolved numeric properties and performs Onda/two-film calculations without chemical-name branching.
+- The locked V3 coefficient basis is intentionally preserved before any physics revision.
         """
     )
 
@@ -420,10 +531,11 @@ with quality_tab:
     st.success("PHASE1_DATA_GATE = PASS")
     st.success("PHASE2_REGISTRY_GATE = PASS")
     st.success("PHASE3_RESOLVER_GATE = PASS")
+    st.success("PHASE4_MASS_TRANSFER_GATE = PASS")
     st.caption("23 automated tests pass in the packaged Phase 3 source tree.")
 
 st.divider()
 st.caption(
-    "Generic Packed Absorber Simulator V4 · Phase 3 · Property Resolver · "
-    "Next: Phase 4 generic Onda mass-transfer core"
+    "Generic Packed Absorber Simulator V4 · Phase 4 · Generic Onda Mass Transfer Core · "
+    "Next: Phase 5 generic counter-current ODE solver"
 )

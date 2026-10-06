@@ -1,16 +1,48 @@
-# Streamlit Community Cloud deployment — Phase 3
+# Streamlit Community Cloud — Phase 4
 
-Use the same GitHub repository and the same Streamlit app created for Phase 1/2.
+Use the existing GitHub repository; do not create a new repository/app.
 
-1. Extract the Phase 3 ZIP locally.
-2. Upload the updated files/folders to the **root of the existing GitHub repository**.
-3. Confirm the repository root contains `app.py`, `requirements.txt`, and the folder `generic_absorber_v4/`.
-4. Inside `generic_absorber_v4/`, confirm `resolver.py` is present together with `__init__.py`, `models.py`, `reference_data.py`, and `registry.py`.
-5. Commit with a message such as `Phase 3 - property resolver`.
-6. Streamlit Community Cloud should redeploy automatically from the existing app.
-7. After redeploy, the sidebar should show:
-   - `PHASE1_DATA_GATE = PASS`
-   - `PHASE2_REGISTRY_GATE = PASS`
-   - `PHASE3_RESOLVER_GATE = PASS`
+Upload/replace the Phase 4 package contents while preserving this repository structure:
 
-Do not create a new Streamlit application unless the existing deployment has been deleted.
+```text
+app.py
+requirements.txt
+README.md
+PHASE1_STATUS.md
+PHASE2_STATUS.md
+PHASE3_STATUS.md
+PHASE4_STATUS.md
+phase1_check.py
+phase2_check.py
+phase3_check.py
+phase4_check.py
+generic_absorber_v4/
+    __init__.py
+    models.py
+    reference_data.py
+    registry.py
+    resolver.py
+    mass_transfer.py
+tests/
+    test_phase1_reference_data.py
+    test_phase2_registry.py
+    test_phase3_property_resolver.py
+    test_phase4_mass_transfer.py
+```
+
+Streamlit entry point remains:
+
+```text
+app.py
+```
+
+After GitHub commit, the existing Streamlit Community Cloud app should redeploy automatically.
+
+Expected sidebar gates:
+
+```text
+PHASE1_DATA_GATE = PASS
+PHASE2_REGISTRY_GATE = PASS
+PHASE3_RESOLVER_GATE = PASS
+PHASE4_MASS_TRANSFER_GATE = PASS
+```
