@@ -667,3 +667,44 @@ __all__.extend([
     "DatabaseExplorer",
     "run_phase18e_explorer_gate",
 ])
+
+# Phase 18F — controlled chemical database expansion framework
+from .chemical_import import (
+    PHASE18F_EXPANSION_FRAMEWORK_ID,
+    PHASE18F_IMPORT_CONTRACT_VERSION,
+    PHASE18F_TEMPLATE_FILENAME,
+    ImportSeverity,
+    ImportIssue,
+    ImportInventoryDelta,
+    ImportValidationReport,
+    ImportExecutionReport,
+    Phase18FGateReport,
+    ChemicalImportError,
+    ChemicalImportValidationError,
+    chemical_import_template,
+    write_chemical_import_template,
+    validate_chemical_import_package,
+    import_chemical_package,
+    phase18f_synthetic_package,
+    run_phase18f_expansion_gate,
+)
+
+__all__.extend([
+    "PHASE18F_EXPANSION_FRAMEWORK_ID",
+    "PHASE18F_IMPORT_CONTRACT_VERSION",
+    "PHASE18F_TEMPLATE_FILENAME",
+    "ImportSeverity",
+    "ImportIssue",
+    "ImportInventoryDelta",
+    "ImportValidationReport",
+    "ImportExecutionReport",
+    "Phase18FGateReport",
+    "ChemicalImportError",
+    "ChemicalImportValidationError",
+    "chemical_import_template",
+    "write_chemical_import_template",
+    "validate_chemical_import_package",
+    "import_chemical_package",
+    "phase18f_synthetic_package",
+    "run_phase18f_expansion_gate",
+])

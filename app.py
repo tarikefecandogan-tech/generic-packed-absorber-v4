@@ -132,16 +132,30 @@ from generic_absorber_v4 import (
     run_phase18e_explorer_gate,
 )
 
-from generic_absorber_v4 import (
-    PHASE18F_EXPANSION_FRAMEWORK_ID,
-    PHASE18F_IMPORT_CONTRACT_VERSION,
-    PHASE18F_TEMPLATE_FILENAME,
-    ImportSeverity,
-    SQLiteAbsorberRepositoryV18B,
-    chemical_import_template,
-    validate_chemical_import_package,
-    run_phase18f_expansion_gate,
-)
+# Phase 18F is optional at startup so a mixed GitHub deployment cannot crash
+# the entire simulator. The feature is enabled only when its module imports cleanly.
+PHASE18F_AVAILABLE = False
+PHASE18F_IMPORT_ERROR = None
+try:
+    from generic_absorber_v4.chemical_import import (
+        PHASE18F_EXPANSION_FRAMEWORK_ID,
+        PHASE18F_IMPORT_CONTRACT_VERSION,
+        PHASE18F_TEMPLATE_FILENAME,
+        ImportSeverity,
+        chemical_import_template,
+        validate_chemical_import_package,
+        run_phase18f_expansion_gate,
+    )
+    PHASE18F_AVAILABLE = True
+except Exception as _phase18f_exc:
+    PHASE18F_IMPORT_ERROR = f"{type(_phase18f_exc).__name__}: {_phase18f_exc}"
+    PHASE18F_EXPANSION_FRAMEWORK_ID = "PHASE18F_UNAVAILABLE"
+    PHASE18F_IMPORT_CONTRACT_VERSION = "UNAVAILABLE"
+    PHASE18F_TEMPLATE_FILENAME = "chemical_import_template.json"
+    ImportSeverity = None
+    chemical_import_template = None
+    validate_chemical_import_package = None
+    run_phase18f_expansion_gate = None
 
 st.set_page_config(
     page_title="Generic Packed Absorber Simulator V4",
@@ -1491,7 +1505,14 @@ if explorer_tab.open:
             )
 
 
-if expansion_tab.open:
+if expansion_tab.open and not PHASE18F_AVAILABLE:
+    with expansion_tab:
+        st.subheader("Phase 18F — Chemical Database Expansion Framework")
+        st.error("Phase 18F module is not available in this deployment, but the rest of the application remains usable.")
+        st.code(PHASE18F_IMPORT_ERROR or "Unknown Phase 18F import error")
+        st.info("Replace the full generic_absorber_v4 package from the same release ZIP; do not mix app.py with an older package folder.")
+
+if expansion_tab.open and PHASE18F_AVAILABLE:
     with expansion_tab:
         st.subheader("Phase 18F — Chemical Database Expansion Framework")
         st.caption(
