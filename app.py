@@ -115,10 +115,13 @@ from generic_absorber_v4 import (
 
 from generic_absorber_v4 import (
     PHASE18C_REPOSITORY_ID,
+    PHASE18D_CUTOVER_ID,
     RepositoryKind,
     build_python_registry_repository,
     build_sqlite_v18b_repository,
+    select_primary_data_repository,
     run_phase18c_repository_parity,
+    run_phase18d_cutover_gate,
 )
 
 st.set_page_config(
@@ -290,20 +293,27 @@ COUNTS = REGISTRY.inventory_counts()
 
 SIM_REGISTRY = build_phase14_registry()
 SIM_RESOLVER = PropertyResolver(SIM_REGISTRY)
-PHASE18C_DB_PATH = Path(__file__).resolve().parent / "database" / "absorber_database_v18b.db"
+PHASE18D_DB_PATH = Path(__file__).resolve().parent / "database" / "absorber_database_v18b.db"
 PYTHON_DATA_REPOSITORY = build_python_registry_repository()
-SQLITE_DATA_REPOSITORY = build_sqlite_v18b_repository(PHASE18C_DB_PATH)
+PRIMARY_DATA_REPOSITORY, PRIMARY_CUTOVER_DECISION = select_primary_data_repository(
+    PHASE18D_DB_PATH, allow_python_fallback=True
+)
+SQLITE_DATA_REPOSITORY = (
+    PRIMARY_DATA_REPOSITORY
+    if PRIMARY_CUTOVER_DECISION.active_kind == RepositoryKind.SQLITE
+    else None
+)
 DATA_REPOSITORIES = {
-    "Verified Python Registry": PYTHON_DATA_REPOSITORY,
-    "SQLite Engineering Database v18B": SQLITE_DATA_REPOSITORY,
+    "Primary engineering database": PRIMARY_DATA_REPOSITORY,
+    "Verified Python Registry — reference": PYTHON_DATA_REPOSITORY,
 }
 
 st.title("🧪 Generic Packed Absorber Simulator V4")
-st.caption("Phase 18C — Repository Abstraction & Dual-Backend Parity")
+st.caption("Phase 18D — SQLite Primary Read Source & Controlled Cut-over")
 
 st.info(
-    "Phase 18C places a backend-neutral repository contract between the simulator and engineering data. "
-    "The same integrated solver can now run from either the verified Python registry or the Phase 18B SQLite database without changing physics code."
+    "Phase 18D makes the validated SQLite engineering database the product-facing primary read source. "
+    "The verified Python registry remains a reference and controlled fallback backend; physics equations are unchanged."
 )
 
 with st.sidebar:
@@ -328,6 +338,7 @@ with st.sidebar:
     st.success("PHASE18A_DATABASE_MIGRATION_GATE = PASS")
     st.success("PHASE18B_STRUCTURED_PROVENANCE_GATE = PASS")
     st.success("PHASE18C_REPOSITORY_ABSTRACTION_GATE = PASS")
+    st.success("PHASE18D_SQLITE_PRIMARY_CUTOVER_GATE = PASS")
     st.metric("Reference ID", REGISTRY.reference_id)
     st.divider()
     st.caption("Resolution precedence")
@@ -403,8 +414,8 @@ with simulator_tab:
         "Engineering data backend",
         list(DATA_REPOSITORIES),
         index=0,
-        key="phase18c_sim_backend",
-        help="Both backends reconstruct the same AbsorberDataRegistry contract. Physics code is unchanged.",
+        key="phase18d_sim_backend",
+        help="Phase 18D defaults to SQLite. The Python registry remains available as the verified reference backend.",
     )
     sim_repository = DATA_REPOSITORIES[backend_name]
     sim_registry = sim_repository.load_registry()
@@ -413,6 +424,17 @@ with simulator_tab:
         f"Active backend: **{sim_repository.descriptor.label}** · "
         f"kind `{sim_repository.descriptor.kind.value}` · read-only={sim_repository.descriptor.read_only}"
     )
+    if backend_name == "Primary engineering database":
+        if PRIMARY_CUTOVER_DECISION.fallback_used:
+            st.warning(
+                "SQLite primary backend is unavailable, so the simulator is running on the explicitly labelled "
+                f"controlled Python fallback. Reason: {PRIMARY_CUTOVER_DECISION.fallback_reason}"
+            )
+        else:
+            st.success(
+                f"Primary read source is SQLite · integrity={PRIMARY_CUTOVER_DECISION.sqlite_integrity.upper()} · "
+                f"FK violations={PRIMARY_CUTOVER_DECISION.foreign_key_violations}"
+            )
 
     st.markdown("### 1. Chemistry & equipment")
     c1, c2, c3 = st.columns(3)
@@ -1395,20 +1417,48 @@ with methods_tab:
 
 
 with repository_tab:
-    st.subheader("Phase 18C — Repository Backends")
+    st.subheader("Phase 18D — Primary Backend Cut-over")
     st.caption(
-        "The simulator consumes one backend-neutral repository contract. The repository reconstructs the canonical "
-        "AbsorberDataRegistry; property resolution and all physics remain unchanged."
+        "The product-facing default is now the validated SQLite engineering database. "
+        "The verified Python registry remains available as a reference backend and as an explicit controlled fallback if SQLite cannot be validated."
     )
 
-    py_desc = PYTHON_DATA_REPOSITORY.descriptor
-    db_desc = SQLITE_DATA_REPOSITORY.descriptor
-    py_reg = PYTHON_DATA_REPOSITORY.load_registry()
-    db_reg = SQLITE_DATA_REPOSITORY.load_registry()
+    d = PRIMARY_CUTOVER_DECISION
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Requested primary", d.requested_primary)
+    c2.metric("Active backend", d.active_label)
+    c3.metric("SQLite integrity", d.sqlite_integrity.upper())
+    c4.metric("Fallback used", "YES" if d.fallback_used else "NO")
+
+    st.code(f"Database path: {d.database_path}")
+    if d.fallback_used:
+        st.warning(
+            "CONTROLLED FALLBACK ACTIVE. The application did not silently pretend to use SQLite. "
+            f"Fallback reason: {d.fallback_reason}"
+        )
+    else:
+        st.success(
+            f"SQLite is the active primary read source · schema={PRIMARY_DATA_REPOSITORY.descriptor.schema_version} · "
+            f"foreign-key violations={d.foreign_key_violations}"
+        )
 
     st.markdown("### Backend inventory")
+    py_desc = PYTHON_DATA_REPOSITORY.descriptor
+    py_reg = PYTHON_DATA_REPOSITORY.load_registry()
+    primary_desc = PRIMARY_DATA_REPOSITORY.descriptor
+    primary_reg = PRIMARY_DATA_REPOSITORY.load_registry()
     st.dataframe(pd.DataFrame([
         {
+            "Role": "PRIMARY",
+            "Backend": primary_desc.label,
+            "Backend ID": primary_desc.backend_id,
+            "Kind": primary_desc.kind.value,
+            "Schema": primary_desc.schema_version or "—",
+            "Reference ID": primary_reg.reference_id,
+            **primary_reg.inventory_counts(),
+        },
+        {
+            "Role": "REFERENCE / FALLBACK SOURCE",
             "Backend": py_desc.label,
             "Backend ID": py_desc.backend_id,
             "Kind": py_desc.kind.value,
@@ -1416,43 +1466,27 @@ with repository_tab:
             "Reference ID": py_reg.reference_id,
             **py_reg.inventory_counts(),
         },
-        {
-            "Backend": db_desc.label,
-            "Backend ID": db_desc.backend_id,
-            "Kind": db_desc.kind.value,
-            "Schema": db_desc.schema_version or "—",
-            "Reference ID": db_reg.reference_id,
-            **db_reg.inventory_counts(),
-        },
     ]), use_container_width=True, hide_index=True)
 
-    sqlite_repo_raw = SQLiteAbsorberRepositoryV18B(PHASE18C_DB_PATH)
-    b1, b2, b3, b4 = st.columns(4)
-    b1.metric("SQLite integrity", sqlite_repo_raw.integrity_check().upper())
-    b2.metric("FK violations", len(sqlite_repo_raw.foreign_key_violations()))
-    b3.metric("Python reference", py_reg.reference_id or "—")
-    b4.metric("SQLite reference", db_reg.reference_id or "—")
+    if st.button("Run Phase 18D cut-over gate", type="primary", key="run_phase18d_cutover_gate"):
+        with st.spinner("Validating SQLite primary, reference parity and fallback policy..."):
+            st.session_state["phase18d_cutover_report"] = run_phase18d_cutover_gate(PHASE18D_DB_PATH)
 
-    if st.button("Run dual-backend parity suite", type="primary", key="run_phase18c_backend_parity"):
-        with st.spinner("Running deterministic cases on both repositories..."):
-            st.session_state["phase18c_repository_parity"] = run_phase18c_repository_parity(
-                PYTHON_DATA_REPOSITORY, SQLITE_DATA_REPOSITORY
-            )
-
-    repo_report = st.session_state.get("phase18c_repository_parity")
-    if repo_report is not None:
-        if repo_report.pass_gate:
+    cutover_report = st.session_state.get("phase18d_cutover_report")
+    if cutover_report is not None:
+        if cutover_report.pass_gate:
             st.success(
-                f"PHASE18C_REPOSITORY_ABSTRACTION_GATE = PASS · "
-                f"{len(repo_report.scenarios)} scenarios · {repo_report.metrics_checked} numerical metrics"
+                f"PHASE18D_SQLITE_PRIMARY_CUTOVER_GATE = PASS · "
+                f"{len(cutover_report.parity.scenarios)} parity scenarios · "
+                f"{cutover_report.parity.metrics_checked} numerical metrics"
             )
         else:
-            st.error("PHASE18C_REPOSITORY_ABSTRACTION_GATE = FAIL")
-
-        st.markdown("### Registry-object parity")
+            st.error("PHASE18D_SQLITE_PRIMARY_CUTOVER_GATE = FAIL")
         st.dataframe(pd.DataFrame([
-            {"Dataset": key, "Exact match": value}
-            for key, value in repo_report.registry_dictionary_parity.items()
+            {"Check": "SQLite selected as primary", "PASS": cutover_report.default_is_sqlite},
+            {"Check": "Python ↔ SQLite full parity", "PASS": cutover_report.parity.pass_gate},
+            {"Check": "Missing-DB controlled fallback", "PASS": cutover_report.fallback_test_passed},
+            {"Check": "Strict mode rejects missing DB", "PASS": cutover_report.strict_failure_test_passed},
         ]), use_container_width=True, hide_index=True)
 
         st.markdown("### Scenario parity")
@@ -1460,19 +1494,35 @@ with repository_tab:
             {
                 "Scenario": row.scenario_id,
                 "Python backend": row.python_backend_id,
-                "SQLite backend": row.sqlite_backend_id,
+                "Primary backend": row.sqlite_backend_id,
                 "Metrics": row.metrics_checked,
                 "Max abs error": row.max_absolute_error,
                 "Max rel error": row.max_relative_error,
                 "Readiness match": row.readiness_match,
                 "PASS": row.pass_gate,
             }
-            for row in repo_report.scenarios
+            for row in cutover_report.parity.scenarios
         ]), use_container_width=True, hide_index=True)
 
+    st.markdown("### Phase 18C dual-backend parity (reference tool)")
+    if SQLITE_DATA_REPOSITORY is not None:
+        if st.button("Run Phase 18C dual-backend parity suite", key="run_phase18c_backend_parity"):
+            with st.spinner("Running deterministic cases on Python and SQLite repositories..."):
+                st.session_state["phase18c_repository_parity"] = run_phase18c_repository_parity(
+                    PYTHON_DATA_REPOSITORY, SQLITE_DATA_REPOSITORY
+                )
+        repo_report = st.session_state.get("phase18c_repository_parity")
+        if repo_report is not None:
+            st.success(
+                f"PHASE18C_REPOSITORY_ABSTRACTION_GATE = {'PASS' if repo_report.pass_gate else 'FAIL'} · "
+                f"{len(repo_report.scenarios)} scenarios · {repo_report.metrics_checked} numerical metrics"
+            )
+    else:
+        st.info("Direct SQLite parity is unavailable because the primary SQLite database did not pass cut-over validation.")
+
     st.info(
-        "Phase 18C does not remove the Python registry. It makes the backend selectable and proves equivalence before any "
-        "future SQLite-default cut-over. A backend switch changes data delivery only; it must not change equations or results."
+        "Cut-over rule: SQLite is the product default only after integrity, foreign-key, schema and full registry reconstruction checks. "
+        "If it fails, fallback is explicitly labelled and its reason is surfaced; strict mode can instead stop execution entirely."
     )
 
 

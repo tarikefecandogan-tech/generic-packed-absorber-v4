@@ -159,3 +159,18 @@ Recommended commit message:
 `Phase 18C - repository abstraction and dual-backend parity`
 
 After deployment, confirm the sidebar shows `PHASE18C_REPOSITORY_ABSTRACTION_GATE = PASS`. In **Simulator**, switch between **Verified Python Registry** and **SQLite Engineering Database v18B**. In **Repository Backends**, run the dual-backend parity suite; all five scenarios and 119 numerical metrics should pass. If Streamlit Community Cloud retains an old module, use **Manage app → Reboot app**.
+
+
+## Phase 18D — primary database cut-over
+
+The deployed repository **must include**:
+
+```text
+database/absorber_database_v18b.db
+```
+
+The Simulator now selects the Phase-18D primary repository by default. At app startup the SQLite file is validated for integrity, foreign keys, schema version, and full registry reconstruction.
+
+If SQLite cannot be validated, the app does **not** pretend SQLite is active. With the standard UI policy it switches to an explicitly labelled `CONTROLLED_FALLBACK` Python Registry and displays the reason. Phase-18D strict-mode API calls can instead raise an error and stop.
+
+After updating GitHub, use **Manage app → Reboot app** if Streamlit is still holding an older module graph.

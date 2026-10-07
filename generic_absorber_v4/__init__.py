@@ -613,3 +613,30 @@ __all__.extend([
     "RepositoryParityReport",
     "run_phase18c_repository_parity",
 ])
+
+# Phase 18D — SQLite primary read-source cut-over with explicit fallback policy
+from .repository import (
+    PHASE18D_CUTOVER_ID,
+    DEFAULT_SQLITE_FILENAME,
+    PrimaryRepositoryUnavailableError,
+    CutoverDecision,
+    default_sqlite_database_path,
+    select_primary_data_repository,
+)
+from .cutover_validation import (
+    PHASE18D_VALIDATION_ID,
+    Phase18DCutoverReport,
+    run_phase18d_cutover_gate,
+)
+
+__all__.extend([
+    "PHASE18D_CUTOVER_ID",
+    "DEFAULT_SQLITE_FILENAME",
+    "PrimaryRepositoryUnavailableError",
+    "CutoverDecision",
+    "default_sqlite_database_path",
+    "select_primary_data_repository",
+    "PHASE18D_VALIDATION_ID",
+    "Phase18DCutoverReport",
+    "run_phase18d_cutover_gate",
+])

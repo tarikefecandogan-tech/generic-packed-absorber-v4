@@ -1,3 +1,13 @@
+# Phase 18D update — SQLite primary read source
+
+Phase 18D performs the controlled product-facing cut-over to `database/absorber_database_v18b.db`. The Streamlit Simulator now uses the validated SQLite database by default, while the verified Python Registry remains available as a reference and explicit controlled fallback. SQLite activation requires integrity, foreign-key, schema-version and full registry-reconstruction checks.
+
+Current gates: **169/169 automated tests PASS**, **82/82 V3 parity PASS**, and **5/5 dual-backend scenarios / 119/119 metrics exact match**.
+
+See `PHASE18D_STATUS.md` for the complete cut-over and fallback policy.
+
+---
+
 # Generic Packed Absorber Simulator V4 — Phase 18C
 
 Phase 18C introduces a backend-neutral engineering-data repository contract. The integrated simulator can now run from either the verified Python registry or the Phase 18B SQLite database without changing physics code.
