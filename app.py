@@ -105,6 +105,14 @@ from generic_absorber_v4 import (
     compare_registry_to_sqlite,
 )
 
+from generic_absorber_v4 import (
+    PHASE18B_DATABASE_ID,
+    PHASE18B_SCHEMA_VERSION,
+    SQLiteAbsorberRepositoryV18B,
+    build_phase18b_database,
+    compare_registry_to_phase18b_sqlite,
+)
+
 st.set_page_config(
     page_title="Generic Packed Absorber Simulator V4",
     page_icon="🧪",
@@ -276,11 +284,11 @@ SIM_REGISTRY = build_phase14_registry()
 SIM_RESOLVER = PropertyResolver(SIM_REGISTRY)
 
 st.title("🧪 Generic Packed Absorber Simulator V4")
-st.caption("Phase 18A — SQLite Database Schema & Migration Architecture")
+st.caption("Phase 18B — Structured Sources & Property Provenance Architecture")
 
 st.info(
-    "Phase 18A adds a persistent SQLite engineering database schema and migration/parity layer without changing the active physics source. "
-    "The Phase 17 Python registry remains the solver default while SQLite round-trip equivalence is verified before any production cut-over."
+    "Phase 18B keeps the Phase 18A SQLite parity architecture and adds structured bibliographic metadata plus property-scope provenance links. "
+    "The verified Python registry still remains the production solver default while database governance is strengthened before cut-over."
 )
 
 with st.sidebar:
@@ -303,6 +311,7 @@ with st.sidebar:
     st.success("PHASE16_PARAMETER_SWEEP_GATE = PASS")
     st.success("PHASE17_COMPARISON_GATE = PASS")
     st.success("PHASE18A_DATABASE_MIGRATION_GATE = PASS")
+    st.success("PHASE18B_STRUCTURED_PROVENANCE_GATE = PASS")
     st.metric("Reference ID", REGISTRY.reference_id)
     st.divider()
     st.caption("Resolution precedence")
@@ -318,6 +327,7 @@ with st.sidebar:
     sweep_tab,
     comparison_tab,
     database_tab,
+    provenance_tab,
     overview_tab,
     resolver_tab,
     mass_transfer_tab,
@@ -342,6 +352,7 @@ with st.sidebar:
     "Parameter Sweep",
     "Comparison",
     "Database Migration",
+    "Data Provenance",
     "Overview",
     "Property Resolver",
     "Mass Transfer",
@@ -1178,6 +1189,74 @@ with database_tab:
         st.info(
             "Phase 18A intentionally does not switch the production solver to SQLite yet. "
             "Cut-over comes only after repository abstraction and full old-registry == database regression gates."
+        )
+
+
+with provenance_tab:
+    st.subheader("Phase 18B — Data Provenance & Source Registry")
+    st.caption(
+        "Structured bibliographic audit of the engineering database. This page does not recalculate absorber physics; "
+        "it shows where registered properties/methods came from, their confidence, validity metadata and usage scope."
+    )
+
+    db18b_path = Path(__file__).resolve().parent / "database" / "absorber_database_v18b.db"
+    if not db18b_path.exists():
+        st.error(f"Phase 18B SQLite database not found: {db18b_path}")
+    else:
+        repo18b = SQLiteAbsorberRepositoryV18B(db18b_path)
+        meta18b = repo18b.metadata()
+        cov18b = repo18b.provenance_coverage()
+        p1, p2, p3, p4 = st.columns(4)
+        p1.metric("Schema version", meta18b.get("schema_version", "—"))
+        p2.metric("Structured sources", cov18b.sources)
+        p3.metric("Provenance records", cov18b.provenance_records)
+        p4.metric("Property/method links", cov18b.provenance_usage_records)
+
+        q1, q2, q3, q4 = st.columns(4)
+        q1.metric("Typed sources", f"{cov18b.sources_with_type}/{cov18b.sources}")
+        q2.metric("Titled sources", f"{cov18b.sources_with_title}/{cov18b.sources}")
+        q3.metric("DOI/URL linked", f"{cov18b.sources_with_url_or_doi}/{cov18b.sources}")
+        q4.metric("Unclassified sources", cov18b.unresolved_source_metadata)
+
+        st.markdown("### Confidence distribution")
+        st.dataframe(pd.DataFrame([
+            {"Confidence": "A — user verified / experimental", "Provenance records": cov18b.confidence_A},
+            {"Confidence": "B — trusted literature/database", "Provenance records": cov18b.confidence_B},
+            {"Confidence": "C — correlation estimate", "Provenance records": cov18b.confidence_C},
+            {"Confidence": "D — screening/surrogate", "Provenance records": cov18b.confidence_D},
+        ]), use_container_width=True, hide_index=True)
+
+        if st.button("Run Phase 18B provenance parity gate", key="phase18b_parity_button"):
+            report18b = compare_registry_to_phase18b_sqlite(build_phase18a_source_registry(), repo18b)
+            if report18b.pass_gate:
+                st.success("PHASE18B_STRUCTURED_PROVENANCE_GATE = PASS")
+            else:
+                st.error("PHASE18B_STRUCTURED_PROVENANCE_GATE = FAIL")
+            st.dataframe(pd.DataFrame([
+                {"Dataset": key, "Exact core parity": "PASS" if value else "FAIL"}
+                for key, value in report18b.core_registry_parity.items()
+            ]), use_container_width=True, hide_index=True)
+
+        with st.expander("Structured source catalog", expanded=True):
+            src_df = pd.DataFrame(repo18b.list_sources_detailed())
+            if not src_df.empty:
+                cols = [c for c in [
+                    "source_type","evidence_role","title","authors","publication_year",
+                    "journal_or_publisher","doi","url","provenance_records","usage_records",
+                    "quality_note","citation"
+                ] if c in src_df.columns]
+                st.dataframe(src_df[cols], use_container_width=True, hide_index=True)
+
+        with st.expander("Property / method provenance usage", expanded=False):
+            usage_df = pd.DataFrame(repo18b.list_provenance_usage())
+            st.dataframe(usage_df, use_container_width=True, hide_index=True)
+
+        with st.expander("Source-type coverage", expanded=False):
+            st.dataframe(pd.DataFrame(repo18b.list_source_type_summary()), use_container_width=True, hide_index=True)
+
+        st.info(
+            "Phase 18B improves traceability but does not claim all scientific data are fully literature-verified. "
+            "Internal legacy and screening-surrogate sources remain explicitly labeled, while missing/weak areas are targets for later database expansion."
         )
 
 

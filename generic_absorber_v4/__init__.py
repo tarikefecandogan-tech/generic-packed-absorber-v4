@@ -537,3 +537,44 @@ __all__.extend([
     "build_phase18a_database",
     "compare_registry_to_sqlite",
 ])
+
+# Phase 18B — structured bibliographic source/provenance architecture
+from .source_metadata import (
+    PHASE18B_SOURCE_METADATA_ID,
+    PHASE18B_ACCESSED_ON,
+    SourceMetadata,
+    SOURCE_METADATA_BY_CITATION,
+    metadata_for_citation,
+)
+from .database_v18b import (
+    PHASE18B_SCHEMA_VERSION,
+    PHASE18B_DATABASE_ID,
+    PHASE18B_PROVENANCE_ID,
+    SCHEMA_SQL_18B,
+    ProvenanceCoverageSummary,
+    Phase18BParityReport,
+    SQLiteAbsorberRepositoryV18B,
+    create_empty_phase18b_database,
+    migrate_registry_to_phase18b_sqlite,
+    build_phase18b_database,
+    compare_registry_to_phase18b_sqlite,
+)
+
+__all__.extend([
+    "PHASE18B_SOURCE_METADATA_ID",
+    "PHASE18B_ACCESSED_ON",
+    "SourceMetadata",
+    "SOURCE_METADATA_BY_CITATION",
+    "metadata_for_citation",
+    "PHASE18B_SCHEMA_VERSION",
+    "PHASE18B_DATABASE_ID",
+    "PHASE18B_PROVENANCE_ID",
+    "SCHEMA_SQL_18B",
+    "ProvenanceCoverageSummary",
+    "Phase18BParityReport",
+    "SQLiteAbsorberRepositoryV18B",
+    "create_empty_phase18b_database",
+    "migrate_registry_to_phase18b_sqlite",
+    "build_phase18b_database",
+    "compare_registry_to_phase18b_sqlite",
+])

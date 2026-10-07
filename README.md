@@ -1,3 +1,22 @@
+# Generic Packed Absorber Simulator V4 — Phase 18B
+
+Phase 18B professionalizes the SQLite source/provenance layer while preserving every Phase 18A engineering result. Bibliographic metadata, DOI/URL fields, evidence roles and property-scope usage links are now queryable.
+
+**Current gates:** Phase 1–18B PASS · **158/158 tests PASS** · **82/82 locked V3 parity metrics PASS**.
+
+New database assets:
+
+- `database/absorber_database_v18b.db`
+- `database/schema_v18b.sql`
+- `generic_absorber_v4/source_metadata.py`
+- `generic_absorber_v4/database_v18b.py`
+
+New product tab: **Data Provenance**. The production solver still defaults to the verified Python registry; Phase 18B is a data-governance upgrade, not a physics cut-over.
+
+See `PHASE18B_STATUS.md` for source coverage, structured provenance, parity and governance details.
+
+---
+
 # Generic Packed Absorber Simulator V4 — Phase 18A
 
 Phase 18A introduces the persistent SQLite engineering database schema and migration architecture while keeping the verified Phase 17 Python registry as the production solver data source.

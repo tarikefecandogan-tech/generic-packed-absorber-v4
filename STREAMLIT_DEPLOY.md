@@ -1,3 +1,19 @@
+# Phase 18B deployment note
+
+Upload the complete Phase 18B package, including both database files under `database/`. The Streamlit app now includes a **Data Provenance** tab backed by `database/absorber_database_v18b.db`. The existing Phase 18A migration database remains in the package for backward auditability.
+
+Critical new files:
+
+- `generic_absorber_v4/source_metadata.py`
+- `generic_absorber_v4/database_v18b.py`
+- `database/absorber_database_v18b.db`
+- `database/schema_v18b.sql`
+- `PHASE18B_STATUS.md`
+
+Recommended commit message: `Phase 18B - structured engineering provenance database`
+
+---
+
 # Phase 14 deployment note
 
 Deploy `app.py` from the repository root. Upload the **entire Phase 14 package**, not only `simulation.py`, so `app.py`, `generic_absorber_v4/__init__.py`, `generic_absorber_v4/simulation.py`, and `tests/` stay version-aligned.
