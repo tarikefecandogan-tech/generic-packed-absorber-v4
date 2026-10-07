@@ -205,3 +205,33 @@ Ensure these new files are deployed together:
 - `PHASE18F_STATUS.md`
 
 No new dependency is required; the framework uses the Python standard library plus the existing V4 package.
+
+## Phase 18G — verified chemical batch deployment
+
+Upload the **complete Phase 18G package** over the existing repository. Do not upload only `app.py`: the product primary database and package exports changed together.
+
+Critical aligned files:
+
+- `app.py`
+- `generic_absorber_v4/__init__.py`
+- `generic_absorber_v4/repository.py`
+- `generic_absorber_v4/verified_batch_v18g.py`
+- `database/absorber_database_v18g.db`
+- `database/absorber_database_v18b.db` (historical parity reference; keep it)
+- `database/batches/phase18g_verified_batch.json`
+- `tests/test_phase18g_verified_batch.py`
+- `phase18g_check.py`
+- `PHASE18G_STATUS.md`
+
+Recommended commit message:
+
+`Phase 18G - first verified VOC database expansion batch`
+
+After pushing, use **Manage app → Reboot app**. This full-package/reboot workflow is especially important if an earlier deployment showed an `ImportError`, because it prevents a new `app.py` from being paired with an older `generic_absorber_v4/__init__.py` or module set.
+
+After reboot, confirm:
+
+- sidebar shows `PHASE18G_FIRST_VERIFIED_CHEMICAL_BATCH_GATE = PASS`;
+- Simulator primary backend is `SQLite Engineering Database v18G`;
+- Database Explorer shows 8 solutes;
+- the new **Verified Batch** tab opens and the Phase-18G gate passes.

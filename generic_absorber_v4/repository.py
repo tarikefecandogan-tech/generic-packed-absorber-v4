@@ -3,8 +3,10 @@
 The physics and simulation layers consume a backend-neutral engineering-data
 repository contract. Phase 18C proved that the verified Python registry and the
 Phase-18B SQLite engineering database reconstruct the same canonical registry.
-Phase 18D makes SQLite the *product-facing primary read source* while retaining
-an explicit, auditable Python-registry fallback/reference backend.
+Phase 18D made SQLite the *product-facing primary read source* while retaining
+an explicit, auditable Python-registry fallback/reference backend. Phase 18G advances
+the default packaged data snapshot to the verified expanded v18G database while
+keeping the proven Phase-18B.1 SQL schema.
 
 No transport, equilibrium, ODE or hydraulic physics is implemented here.
 """
@@ -19,7 +21,7 @@ from .registry import AbsorberDataRegistry
 
 PHASE18C_REPOSITORY_ID = "PHASE18C_REPOSITORY_ABSTRACTION_2026_10_07"
 PHASE18D_CUTOVER_ID = "PHASE18D_SQLITE_PRIMARY_CUTOVER_2026_10_07"
-DEFAULT_SQLITE_FILENAME = "absorber_database_v18b.db"
+DEFAULT_SQLITE_FILENAME = "absorber_database_v18g.db"
 
 
 class RepositoryKind(str, Enum):
@@ -124,7 +126,7 @@ class CutoverDecision:
 
 
 def default_sqlite_database_path() -> Path:
-    """Return the packaged Phase-18B SQLite database path.
+    """Return the packaged current primary SQLite database path (Phase 18G data snapshot).
 
     repository.py lives in ``generic_absorber_v4`` while the database directory
     is kept at the project/repository root next to that package.
@@ -157,6 +159,40 @@ def build_sqlite_v18b_repository(database_path: str | Path) -> RegistryLoaderRep
             read_only=True,
         ),
     )
+
+
+def build_sqlite_v18g_repository(database_path: str | Path) -> RegistryLoaderRepository:
+    """Adapt the Phase-18G expanded SQLite snapshot to the common repository contract.
+
+    Phase 18G intentionally retains the proven Phase-18B.1 SQL schema; the
+    distinction is the data snapshot/content, not a new physical-property schema.
+    """
+    from .database_v18b import SQLiteAbsorberRepositoryV18B
+
+    path = Path(database_path)
+    repo = SQLiteAbsorberRepositoryV18B(path)
+    metadata = repo.metadata()
+    return RegistryLoaderRepository(
+        loader=repo.load_registry,
+        _descriptor=RepositoryDescriptor(
+            backend_id="sqlite_v18g",
+            kind=RepositoryKind.SQLITE,
+            label="SQLite Engineering Database v18G",
+            source=str(path),
+            schema_version=metadata.get("schema_version"),
+            read_only=True,
+        ),
+    )
+
+
+def _database_is_phase18g(database_path: Path) -> bool:
+    """Identify the expanded snapshot without coupling the physics layer to it."""
+    try:
+        from .database_v18b import SQLiteAbsorberRepositoryV18B
+        md = SQLiteAbsorberRepositoryV18B(database_path).metadata()
+        return bool(md.get("verified_expansion_batch")) or md.get("data_snapshot_id", "").startswith("PHASE18G_")
+    except Exception:
+        return database_path.name == "absorber_database_v18g.db"
 
 
 def _validate_sqlite_backend(database_path: Path) -> tuple[str, int]:
@@ -233,11 +269,11 @@ def select_primary_data_repository(
     result repository descriptor always identifies the active backend.
     """
     path = Path(database_path) if database_path is not None else default_sqlite_database_path()
-    requested_primary = "SQLite Engineering Database v18B"
+    requested_primary = "SQLite Engineering Database v18G" if _database_is_phase18g(path) else "SQLite Engineering Database v18B"
 
     try:
         integrity, fk_violations = _validate_sqlite_backend(path)
-        repo = build_sqlite_v18b_repository(path)
+        repo = build_sqlite_v18g_repository(path) if _database_is_phase18g(path) else build_sqlite_v18b_repository(path)
         decision = CutoverDecision(
             cutover_id=PHASE18D_CUTOVER_ID,
             requested_primary=requested_primary,

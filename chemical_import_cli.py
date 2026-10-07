@@ -20,7 +20,7 @@ from generic_absorber_v4 import ChemicalImportValidationError, import_chemical_p
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("package", type=Path)
-    parser.add_argument("--database", type=Path, default=Path("database/absorber_database_v18b.db"))
+    parser.add_argument("--database", type=Path, default=Path("database/absorber_database_v18g.db"))
     parser.add_argument("--commit", action="store_true", help="Actually write the package. Default is dry-run.")
     parser.add_argument("--allow-replace", action="store_true", help="Explicitly allow replacement of existing entity/pair keys.")
     parser.add_argument("--no-backup", action="store_true", help="Do not create the pre-import backup when committing.")

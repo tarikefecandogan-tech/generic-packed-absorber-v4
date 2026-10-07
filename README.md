@@ -204,3 +204,11 @@ python chemical_import_cli.py my_chemical_package.json --commit
 A backup is created by default before a commit. Existing IDs/pairs remain append-only unless the operator explicitly adds `--allow-replace`. The Streamlit `Expansion Framework` tab is deliberately dry-run only.
 
 Phase 18F does **not** add a new real chemical to the primary SQLite database; it creates the controlled path by which reviewed data can be added in the next expansion stages.
+
+## Phase 18G — first verified chemical expansion batch
+
+Phase 18G uses the controlled Phase-18F import framework to add the first five real VOCs to a new primary SQLite snapshot: acetone, benzene, toluene, ethylbenzene and dichloromethane. NIST identity and water-Henry data are Confidence B; fixed transport pairs are deliberately not invented, so Fuller/Wilke–Chang remain visible Confidence-C fallbacks.
+
+The product primary database is now `database/absorber_database_v18g.db`. The frozen `absorber_database_v18b.db` remains packaged for historical Python↔SQLite parity gates.
+
+Current regression state: **206/206 tests PASS** and **82/82 locked V3 parity metrics PASS**. See `PHASE18G_STATUS.md` and `database/batches/phase18g_verified_batch.json` for the auditable batch record.
