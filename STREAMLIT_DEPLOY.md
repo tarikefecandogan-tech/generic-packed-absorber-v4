@@ -136,3 +136,26 @@ Recommended commit message:
 After deployment, confirm the sidebar shows `PHASE18A_DATABASE_MIGRATION_GATE = PASS` and open **Database Migration**. The page should report schema version `18A.1`, SQLite integrity `OK`, zero foreign-key violations, and the migrated engineering-record counts. Use the parity button to verify exact round-trip equality.
 
 Phase 18A deliberately leaves the production simulator on the verified Python registry. SQLite cut-over belongs to the later repository-abstraction/parity phase.
+
+
+## Phase 18C update
+
+Upload the **complete Phase 18C package** over the existing repository. Keep the SQLite database and repository abstraction files version-aligned.
+
+Important files:
+
+- `app.py`
+- `generic_absorber_v4/__init__.py`
+- `generic_absorber_v4/simulation.py`
+- `generic_absorber_v4/repository.py`
+- `generic_absorber_v4/repository_validation.py`
+- `database/absorber_database_v18b.db`
+- `tests/test_phase18c_repository_abstraction.py`
+- `phase18c_check.py`
+- `PHASE18C_STATUS.md`
+
+Recommended commit message:
+
+`Phase 18C - repository abstraction and dual-backend parity`
+
+After deployment, confirm the sidebar shows `PHASE18C_REPOSITORY_ABSTRACTION_GATE = PASS`. In **Simulator**, switch between **Verified Python Registry** and **SQLite Engineering Database v18B**. In **Repository Backends**, run the dual-backend parity suite; all five scenarios and 119 numerical metrics should pass. If Streamlit Community Cloud retains an old module, use **Manage app → Reboot app**.

@@ -113,6 +113,14 @@ from generic_absorber_v4 import (
     compare_registry_to_phase18b_sqlite,
 )
 
+from generic_absorber_v4 import (
+    PHASE18C_REPOSITORY_ID,
+    RepositoryKind,
+    build_python_registry_repository,
+    build_sqlite_v18b_repository,
+    run_phase18c_repository_parity,
+)
+
 st.set_page_config(
     page_title="Generic Packed Absorber Simulator V4",
     page_icon="🧪",
@@ -282,13 +290,20 @@ COUNTS = REGISTRY.inventory_counts()
 
 SIM_REGISTRY = build_phase14_registry()
 SIM_RESOLVER = PropertyResolver(SIM_REGISTRY)
+PHASE18C_DB_PATH = Path(__file__).resolve().parent / "database" / "absorber_database_v18b.db"
+PYTHON_DATA_REPOSITORY = build_python_registry_repository()
+SQLITE_DATA_REPOSITORY = build_sqlite_v18b_repository(PHASE18C_DB_PATH)
+DATA_REPOSITORIES = {
+    "Verified Python Registry": PYTHON_DATA_REPOSITORY,
+    "SQLite Engineering Database v18B": SQLITE_DATA_REPOSITORY,
+}
 
 st.title("🧪 Generic Packed Absorber Simulator V4")
-st.caption("Phase 18B — Structured Sources & Property Provenance Architecture")
+st.caption("Phase 18C — Repository Abstraction & Dual-Backend Parity")
 
 st.info(
-    "Phase 18B keeps the Phase 18A SQLite parity architecture and adds structured bibliographic metadata plus property-scope provenance links. "
-    "The verified Python registry still remains the production solver default while database governance is strengthened before cut-over."
+    "Phase 18C places a backend-neutral repository contract between the simulator and engineering data. "
+    "The same integrated solver can now run from either the verified Python registry or the Phase 18B SQLite database without changing physics code."
 )
 
 with st.sidebar:
@@ -312,6 +327,7 @@ with st.sidebar:
     st.success("PHASE17_COMPARISON_GATE = PASS")
     st.success("PHASE18A_DATABASE_MIGRATION_GATE = PASS")
     st.success("PHASE18B_STRUCTURED_PROVENANCE_GATE = PASS")
+    st.success("PHASE18C_REPOSITORY_ABSTRACTION_GATE = PASS")
     st.metric("Reference ID", REGISTRY.reference_id)
     st.divider()
     st.caption("Resolution precedence")
@@ -328,6 +344,7 @@ with st.sidebar:
     comparison_tab,
     database_tab,
     provenance_tab,
+    repository_tab,
     overview_tab,
     resolver_tab,
     mass_transfer_tab,
@@ -353,6 +370,7 @@ with st.sidebar:
     "Comparison",
     "Database Migration",
     "Data Provenance",
+    "Repository Backends",
     "Overview",
     "Property Resolver",
     "Mass Transfer",
@@ -381,21 +399,36 @@ with simulator_tab:
         "Phase 15 builds the live Methods & Assumptions audit from that result; Phase 16 can reuse the same case as a sweep baseline."
     )
 
+    backend_name = st.selectbox(
+        "Engineering data backend",
+        list(DATA_REPOSITORIES),
+        index=0,
+        key="phase18c_sim_backend",
+        help="Both backends reconstruct the same AbsorberDataRegistry contract. Physics code is unchanged.",
+    )
+    sim_repository = DATA_REPOSITORIES[backend_name]
+    sim_registry = sim_repository.load_registry()
+    sim_resolver = PropertyResolver(sim_registry)
+    st.caption(
+        f"Active backend: **{sim_repository.descriptor.label}** · "
+        f"kind `{sim_repository.descriptor.kind.value}` · read-only={sim_repository.descriptor.read_only}"
+    )
+
     st.markdown("### 1. Chemistry & equipment")
     c1, c2, c3 = st.columns(3)
     sim_carrier = c1.selectbox(
-        "Carrier gas", list(SIM_REGISTRY.carriers),
-        format_func=lambda x: SIM_REGISTRY.get_carrier(x).name,
+        "Carrier gas", list(sim_registry.carriers),
+        format_func=lambda x: sim_registry.get_carrier(x).name,
         key="sim_carrier",
     )
     sim_solvent = c2.selectbox(
-        "Solvent", list(SIM_REGISTRY.solvents),
-        format_func=lambda x: SIM_REGISTRY.get_solvent(x).name,
+        "Solvent", list(sim_registry.solvents),
+        format_func=lambda x: sim_registry.get_solvent(x).name,
         key="sim_solvent",
     )
     sim_packing = c3.selectbox(
-        "Packing", list(SIM_REGISTRY.packings),
-        format_func=lambda x: SIM_REGISTRY.get_packing(x).name,
+        "Packing", list(sim_registry.packings),
+        format_func=lambda x: sim_registry.get_packing(x).name,
         key="sim_packing",
     )
 
@@ -431,7 +464,7 @@ with simulator_tab:
     st.caption(f"Canonical actual gas flow used by physics core: **{sim_actual_gas_m3_h:.4f} m³/h**")
 
     compatibility = compatible_solutes(
-        SIM_REGISTRY,
+        sim_registry,
         carrier_id=sim_carrier,
         solvent_id=sim_solvent,
         temperature_K=sim_T_K,
@@ -452,7 +485,7 @@ with simulator_tab:
         "Solutes (1–4)",
         ready_solutes,
         default=default_solutes,
-        format_func=lambda x: f"{x} — {SIM_REGISTRY.get_solute(x).name}",
+        format_func=lambda x: f"{x} — {sim_registry.get_solute(x).name}",
         max_selections=4,
         key="sim_solutes",
     )
@@ -556,7 +589,7 @@ with simulator_tab:
             st.error("Select at least one solute.")
         else:
             try:
-                sim_specs = {sid: SIM_REGISTRY.get_solute(sid) for sid in sim_solutes}
+                sim_specs = {sid: sim_registry.get_solute(sid) for sid in sim_solutes}
                 if sim_input_mode == "Component-by-component":
                     sim_y = canonical_y_from_component_concentrations(
                         component_values, sim_gas_basis, sim_specs
@@ -577,11 +610,11 @@ with simulator_tab:
                     if loading_basis == "Mole fraction x":
                         sim_x = {sid: float(loading_values[sid]) for sid in sim_solutes}
                     else:
-                        solvent_state = SIM_RESOLVER.resolve_solvent_state(sim_solvent, sim_T_K)
+                        solvent_state = sim_resolver.resolve_solvent_state(sim_solvent, sim_T_K)
                         for sid in sim_solutes:
                             sim_x[sid] = liquid_mg_L_to_x_dilute(
                                 loading_values[sid],
-                                solute_MW_kg_mol=SIM_REGISTRY.get_solute(sid).MW_kg_mol,
+                                solute_MW_kg_mol=sim_registry.get_solute(sid).MW_kg_mol,
                                 solvent_MW_kg_mol=solvent_state.MW.value,
                                 solvent_density_kg_m3=solvent_state.density.value,
                             )
@@ -605,7 +638,7 @@ with simulator_tab:
                     foaming_expected=foaming_expected,
                 )
                 st.session_state["phase14_result"] = run_generic_absorber_case(
-                    sim_case, registry=SIM_REGISTRY
+                    sim_case, repository=sim_repository
                 )
                 st.session_state.pop("phase14_blocked", None)
             except SimulationBlockedError as exc:
@@ -627,6 +660,10 @@ with simulator_tab:
     if result is not None:
         st.divider()
         st.markdown("## Simulation results")
+        st.caption(
+            f"Data backend used for this result: **{result.data_source.label}** "
+            f"(`{result.data_source.backend_id}`)"
+        )
         status = result.post_applicability.status.value
         if result.post_applicability.blocks:
             st.error(f"FINAL STATUS: {status}")
@@ -1355,6 +1392,88 @@ with methods_tab:
             "Interpretation rule: this page documents the method actually used for the current calculation. "
             "A correlation appearing here does not imply design-grade validity; always read its source, confidence and applicability messages together."
         )
+
+
+with repository_tab:
+    st.subheader("Phase 18C — Repository Backends")
+    st.caption(
+        "The simulator consumes one backend-neutral repository contract. The repository reconstructs the canonical "
+        "AbsorberDataRegistry; property resolution and all physics remain unchanged."
+    )
+
+    py_desc = PYTHON_DATA_REPOSITORY.descriptor
+    db_desc = SQLITE_DATA_REPOSITORY.descriptor
+    py_reg = PYTHON_DATA_REPOSITORY.load_registry()
+    db_reg = SQLITE_DATA_REPOSITORY.load_registry()
+
+    st.markdown("### Backend inventory")
+    st.dataframe(pd.DataFrame([
+        {
+            "Backend": py_desc.label,
+            "Backend ID": py_desc.backend_id,
+            "Kind": py_desc.kind.value,
+            "Schema": py_desc.schema_version or "—",
+            "Reference ID": py_reg.reference_id,
+            **py_reg.inventory_counts(),
+        },
+        {
+            "Backend": db_desc.label,
+            "Backend ID": db_desc.backend_id,
+            "Kind": db_desc.kind.value,
+            "Schema": db_desc.schema_version or "—",
+            "Reference ID": db_reg.reference_id,
+            **db_reg.inventory_counts(),
+        },
+    ]), use_container_width=True, hide_index=True)
+
+    sqlite_repo_raw = SQLiteAbsorberRepositoryV18B(PHASE18C_DB_PATH)
+    b1, b2, b3, b4 = st.columns(4)
+    b1.metric("SQLite integrity", sqlite_repo_raw.integrity_check().upper())
+    b2.metric("FK violations", len(sqlite_repo_raw.foreign_key_violations()))
+    b3.metric("Python reference", py_reg.reference_id or "—")
+    b4.metric("SQLite reference", db_reg.reference_id or "—")
+
+    if st.button("Run dual-backend parity suite", type="primary", key="run_phase18c_backend_parity"):
+        with st.spinner("Running deterministic cases on both repositories..."):
+            st.session_state["phase18c_repository_parity"] = run_phase18c_repository_parity(
+                PYTHON_DATA_REPOSITORY, SQLITE_DATA_REPOSITORY
+            )
+
+    repo_report = st.session_state.get("phase18c_repository_parity")
+    if repo_report is not None:
+        if repo_report.pass_gate:
+            st.success(
+                f"PHASE18C_REPOSITORY_ABSTRACTION_GATE = PASS · "
+                f"{len(repo_report.scenarios)} scenarios · {repo_report.metrics_checked} numerical metrics"
+            )
+        else:
+            st.error("PHASE18C_REPOSITORY_ABSTRACTION_GATE = FAIL")
+
+        st.markdown("### Registry-object parity")
+        st.dataframe(pd.DataFrame([
+            {"Dataset": key, "Exact match": value}
+            for key, value in repo_report.registry_dictionary_parity.items()
+        ]), use_container_width=True, hide_index=True)
+
+        st.markdown("### Scenario parity")
+        st.dataframe(pd.DataFrame([
+            {
+                "Scenario": row.scenario_id,
+                "Python backend": row.python_backend_id,
+                "SQLite backend": row.sqlite_backend_id,
+                "Metrics": row.metrics_checked,
+                "Max abs error": row.max_absolute_error,
+                "Max rel error": row.max_relative_error,
+                "Readiness match": row.readiness_match,
+                "PASS": row.pass_gate,
+            }
+            for row in repo_report.scenarios
+        ]), use_container_width=True, hide_index=True)
+
+    st.info(
+        "Phase 18C does not remove the Python registry. It makes the backend selectable and proves equivalence before any "
+        "future SQLite-default cut-over. A backend switch changes data delivery only; it must not change equations or results."
+    )
 
 
 with overview_tab:

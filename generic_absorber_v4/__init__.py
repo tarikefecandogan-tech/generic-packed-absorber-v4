@@ -578,3 +578,38 @@ __all__.extend([
     "build_phase18b_database",
     "compare_registry_to_phase18b_sqlite",
 ])
+
+# Phase 18C — backend-neutral repository abstraction and parity validation
+from .repository import (
+    PHASE18C_REPOSITORY_ID,
+    RepositoryKind,
+    RepositoryDescriptor,
+    AbsorberDataRepository,
+    PythonRegistryRepository,
+    RegistryLoaderRepository,
+    build_python_registry_repository,
+    build_sqlite_v18b_repository,
+    resolve_registry_source,
+)
+from .repository_validation import (
+    PHASE18C_PARITY_ID,
+    RepositoryScenarioParity,
+    RepositoryParityReport,
+    run_phase18c_repository_parity,
+)
+
+__all__.extend([
+    "PHASE18C_REPOSITORY_ID",
+    "RepositoryKind",
+    "RepositoryDescriptor",
+    "AbsorberDataRepository",
+    "PythonRegistryRepository",
+    "RegistryLoaderRepository",
+    "build_python_registry_repository",
+    "build_sqlite_v18b_repository",
+    "resolve_registry_source",
+    "PHASE18C_PARITY_ID",
+    "RepositoryScenarioParity",
+    "RepositoryParityReport",
+    "run_phase18c_repository_parity",
+])

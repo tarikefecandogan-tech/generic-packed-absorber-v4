@@ -40,6 +40,7 @@ from .mass_transfer import (
     calculate_component_mass_transfer,
 )
 from .registry import AbsorberDataRegistry
+from .repository import AbsorberDataRepository, RepositoryDescriptor, resolve_registry_source
 from .resolver import PropertyResolver, ResolvedComponentProperties
 from .units import GasStreamBalance, GasStreamReport, gas_stream_balance, report_gas_stream
 from .vdc_acn import build_vdc_acn_registry
@@ -106,6 +107,7 @@ class GenericAbsorberSimulationResult:
     case_id: str
     case: GenericAbsorberCase
     registry: AbsorberDataRegistry
+    data_source: RepositoryDescriptor
     resolver: PropertyResolver
     pre_applicability: ApplicabilityReport
     post_applicability: ApplicabilityReport
@@ -162,10 +164,15 @@ def run_generic_absorber_case(
     case: GenericAbsorberCase,
     *,
     registry: Optional[AbsorberDataRegistry] = None,
+    repository: Optional[AbsorberDataRepository] = None,
     solver_options: Optional[CounterCurrentSolverOptions] = None,
 ) -> GenericAbsorberSimulationResult:
     """Run the complete verified V4 calculation chain for one generic case."""
-    registry = registry or build_phase14_registry()
+    registry, data_source = resolve_registry_source(
+        registry=registry,
+        repository=repository,
+        default_registry_factory=build_phase14_registry,
+    )
     resolver = PropertyResolver(registry)
 
     app_case = ApplicabilityCase(
@@ -245,6 +252,7 @@ def run_generic_absorber_case(
         case_id=PHASE14_INTEGRATED_SIMULATOR_ID,
         case=case,
         registry=registry,
+        data_source=data_source,
         resolver=resolver,
         pre_applicability=pre,
         post_applicability=post,

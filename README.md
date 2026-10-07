@@ -1,3 +1,20 @@
+# Generic Packed Absorber Simulator V4 — Phase 18C
+
+Phase 18C introduces a backend-neutral engineering-data repository contract. The integrated simulator can now run from either the verified Python registry or the Phase 18B SQLite database without changing physics code.
+
+**Current gates:** Phase 1–18C PASS · **163/163 tests PASS** · **82/82 locked V3 parity metrics PASS** · **119/119 dual-backend scenario metrics PASS**.
+
+New modules:
+
+- `generic_absorber_v4/repository.py`
+- `generic_absorber_v4/repository_validation.py`
+
+New product tab: **Repository Backends**. The Simulator also exposes an engineering-data backend selector and records the backend identity in each result.
+
+See `PHASE18C_STATUS.md` for repository contracts, scenario parity, regression and governance details.
+
+---
+
 # Generic Packed Absorber Simulator V4 — Phase 18B
 
 Phase 18B professionalizes the SQLite source/provenance layer while preserving every Phase 18A engineering result. Bibliographic metadata, DOI/URL fields, evidence roles and property-scope usage links are now queryable.
