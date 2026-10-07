@@ -294,15 +294,43 @@ def assess_pre_applicability(
         try:
             availability = registry.availability(sid, case.carrier_id, case.solvent_id)
             if not availability.gas_transport_available:
-                issues.append(_issue(
-                    f"MISSING_DG_PAIR_{sid}", IssueSeverity.BLOCK, sid,
-                    f"Gas-transport pair {sid}/{case.carrier_id} is not registered.", category="data",
-                ))
+                solute_obj = registry.get_solute(sid)
+                carrier_obj = registry.get_carrier(case.carrier_id)
+                if (
+                    solute_obj.fuller_diffusion_volume is not None
+                    and carrier_obj.fuller_diffusion_volume is not None
+                ):
+                    issues.append(_issue(
+                        f"DG_CORRELATION_FALLBACK_{sid}", IssueSeverity.WARNING, sid,
+                        f"Gas-transport pair {sid}/{case.carrier_id} is not registered; "
+                        "Fuller correlation inputs are available, so DG will be estimated as Confidence C.",
+                        category="data",
+                    ))
+                else:
+                    issues.append(_issue(
+                        f"MISSING_DG_PAIR_{sid}", IssueSeverity.BLOCK, sid,
+                        f"Gas-transport pair {sid}/{case.carrier_id} is not registered and Fuller inputs are incomplete.",
+                        category="data",
+                    ))
             if not availability.liquid_transport_available:
-                issues.append(_issue(
-                    f"MISSING_DL_PAIR_{sid}", IssueSeverity.BLOCK, sid,
-                    f"Liquid-transport pair {sid}/{case.solvent_id} is not registered.", category="data",
-                ))
+                solute_obj = registry.get_solute(sid)
+                solvent_obj = registry.get_solvent(case.solvent_id)
+                if (
+                    solute_obj.boiling_molar_volume_cm3_mol is not None
+                    and solvent_obj.wilke_chang_association_factor is not None
+                ):
+                    issues.append(_issue(
+                        f"DL_CORRELATION_FALLBACK_{sid}", IssueSeverity.WARNING, sid,
+                        f"Liquid-transport pair {sid}/{case.solvent_id} is not registered; "
+                        "Wilke–Chang inputs are available, so DL will be estimated as Confidence C.",
+                        category="data",
+                    ))
+                else:
+                    issues.append(_issue(
+                        f"MISSING_DL_PAIR_{sid}", IssueSeverity.BLOCK, sid,
+                        f"Liquid-transport pair {sid}/{case.solvent_id} is not registered and Wilke–Chang inputs are incomplete.",
+                        category="data",
+                    ))
             if not availability.equilibrium_available:
                 issues.append(_issue(
                     f"MISSING_EQUILIBRIUM_PAIR_{sid}", IssueSeverity.BLOCK, sid,

@@ -1,0 +1,15 @@
+from generic_absorber_v4 import run_vdc_water_case
+
+r = run_vdc_water_case()
+print(f"PHASE12_VDC_WATER_GATE = {'PASS' if r.pass_gate else 'FAIL'}")
+print(f"PRE_STATUS = {r.pre_applicability.status.value}")
+print(f"FINAL_STATUS = {r.post_applicability.status.value}")
+print(f"OVERALL_CONFIDENCE = {r.post_applicability.confidence.overall.value}")
+print(f"DG = {r.resolved.gas_diffusivity.value:.12e} m2/s [{r.resolved.gas_diffusivity.tier.value}/{r.resolved.gas_diffusivity.confidence.value}]")
+print(f"DL = {r.resolved.liquid_diffusivity.value:.12e} m2/s [{r.resolved.liquid_diffusivity.tier.value}/{r.resolved.liquid_diffusivity.confidence.value}]")
+print(f"H = {r.resolved.equilibrium.active_property.value:.12g} Pa m3/mol [{r.resolved.equilibrium.active_property.confidence.value}]")
+print(f"A = {r.transfer.absorption_factor:.12g}")
+print(f"HTU = {r.transfer.HTU_OG_m:.12g} m")
+print(f"OUTLET = {r.gas_outlet_report.total_ppmv:.9f} ppmv")
+print(f"REMOVAL = {100*r.solver.removal_fraction:.9f} %")
+print(f"MASS_BALANCE_ERROR = {r.solver.diagnostics.relative_mass_balance_error:.3e}")

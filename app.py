@@ -43,6 +43,18 @@ from generic_absorber_v4 import (
     run_synthetic_generic_case,
     PHASE11_ESTIMATION_CASE_ID,
     run_phase11_estimation_gate,
+    PHASE12_VDC_WATER_CASE_ID,
+    VDC_ID,
+    VDC_CAS,
+    VDC_FORMULA,
+    VDC_FULLER_DIFFUSION_VOLUME,
+    VDC_LEBAS_BOILING_MOLAR_VOLUME_CM3_MOL,
+    VDC_WATER_H_REF_PA_M3_MOL,
+    NIST_GOSSETT_SOURCE,
+    FULLER_SOURCE,
+    WILKE_CHANG_SOURCE,
+    build_vdc_water_registry,
+    run_vdc_water_case,
 )
 
 st.set_page_config(
@@ -213,12 +225,12 @@ RESOLVER = build_reference_resolver()
 COUNTS = REGISTRY.inventory_counts()
 
 st.title("🧪 Generic Packed Absorber Simulator V4")
-st.caption("Phase 11 — Property Estimation Correlations")
+st.caption("Phase 12 — VDC / Water Real-Chemistry Extension")
 
 st.warning(
-    "Phase 11 adds controlled transport-property fallback estimators. Registered pair data still have priority. "
-    "Fuller and Wilke–Chang are used only when the corresponding binary diffusivity pair is missing and all "
-    "required pure-component inputs are available. Every estimated value is explicitly tagged Confidence C."
+    "Phase 12 adds the first real chemistry outside the locked ACN/VAc reference: VDC / Water. "
+    "VDC-water equilibrium uses a traceable NIST/Gossett dataset (Confidence B), while missing VDC transport "
+    "pairs intentionally resolve through Fuller and Wilke–Chang as visible Confidence C estimates."
 )
 
 with st.sidebar:
@@ -234,6 +246,7 @@ with st.sidebar:
     st.success("PHASE9_FULL_V3_PARITY_GATE = PASS")
     st.success("PHASE10_SYNTHETIC_GENERIC_GATE = PASS")
     st.success("PHASE11_PROPERTY_ESTIMATION_GATE = PASS")
+    st.success("PHASE12_VDC_WATER_GATE = PASS")
     st.metric("Reference ID", REGISTRY.reference_id)
     st.divider()
     st.caption("Resolution precedence")
@@ -254,6 +267,7 @@ with st.sidebar:
     parity_tab,
     synthetic_tab,
     estimation_tab,
+    vdc_tab,
     lookup_tab,
     solute_tab,
     fluid_tab,
@@ -271,6 +285,7 @@ with st.sidebar:
     "V3 Parity Gate",
     "Synthetic Generic Test",
     "Property Estimates",
+    "VDC / Water",
     "Registry Lookup",
     "Solutes",
     "Carrier & Solvent",
@@ -280,7 +295,7 @@ with st.sidebar:
 ])
 
 with overview_tab:
-    st.subheader("Phase 11 architecture")
+    st.subheader("Phase 12 architecture")
     st.code(
         """Phase 1 immutable data objects
         ↓
@@ -335,6 +350,11 @@ Phase 11 Property Estimation Correlations
 missing DG → Fuller (when inputs exist)
 missing DL → Wilke–Chang (when inputs exist)
 all estimates → CORRELATION_ESTIMATE / Confidence C
+        ↓
+Phase 12 VDC / Water Real Chemistry
+        ↓
+NIST/Gossett Henry equilibrium + Fuller DG + Wilke–Chang DL
+first real non-reference chemistry gate
 
 No required-height design yet.""",
         language="text",
@@ -1263,6 +1283,87 @@ with estimation_tab:
     )
 
 
+with vdc_tab:
+    st.subheader("Phase 12 — VDC / Water real-chemistry gate")
+    st.caption(
+        "This is the first real chemistry added outside the locked V3 ACN/VAc dataset. "
+        "The default engineering fixture uses the reference column geometry at 22 °C, 1 atm, 1000 ppmv VDC and fresh water. "
+        "It is a model verification fixture, not a claim that the plant feed is exactly 1000 ppmv."
+    )
+
+    st.markdown("### Registered VDC identity and equilibrium")
+    st.dataframe(pd.DataFrame([
+        {
+            "ID": VDC_ID,
+            "Name": "1,1-Dichloroethylene / Vinylidene chloride",
+            "CAS": VDC_CAS,
+            "Formula": VDC_FORMULA,
+            "MW (g/mol)": 96.943,
+            "Fuller volume": VDC_FULLER_DIFFUSION_VOLUME,
+            "Le Bas Vb (cm³/mol)": VDC_LEBAS_BOILING_MOLAR_VOLUME_CM3_MOL,
+            "Hpc ref (Pa·m³/mol @ 298.15 K)": VDC_WATER_H_REF_PA_M3_MOL,
+        }
+    ]), use_container_width=True, hide_index=True)
+
+    st.info(
+        "Primary Henry dataset: NIST WebBook compilation, measured Gossett (1987) entry kH=0.039 mol/(kg·bar) "
+        "with temperature coefficient 3700 K. Published VDC/water Henry values show substantial scatter, so the "
+        "equilibrium choice remains an explicit design uncertainty."
+    )
+
+    if st.button("Run Phase 12 VDC / Water gate", type="primary", key="run_phase12_vdc_water"):
+        report = run_vdc_water_case()
+        if report.pass_gate:
+            st.success("PHASE12_VDC_WATER_GATE = PASS")
+        else:
+            st.error("PHASE12_VDC_WATER_GATE = FAIL")
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Case", PHASE12_VDC_WATER_CASE_ID)
+        c2.metric("Pre-check", report.pre_applicability.status.value)
+        c3.metric("Final status", report.post_applicability.status.value)
+        c4.metric("Overall confidence", report.post_applicability.confidence.overall.value)
+
+        st.markdown("### Resolved property path")
+        st.dataframe(pd.DataFrame([
+            resolved_row("VDC DG", report.resolved.gas_diffusivity),
+            resolved_row("VDC DL", report.resolved.liquid_diffusivity),
+            resolved_row("VDC-water Henry Hpc", report.resolved.equilibrium.active_property),
+        ]), use_container_width=True, hide_index=True)
+
+        st.markdown("### Absorber result — deterministic Phase 12 fixture")
+        r1, r2, r3, r4 = st.columns(4)
+        r1.metric("Inlet", f"{report.gas_inlet_report.total_ppmv:.1f} ppmv")
+        r2.metric("Outlet", f"{report.gas_outlet_report.total_ppmv:.1f} ppmv")
+        r3.metric("Removal", f"{100*report.solver.removal_fraction:.3f}%")
+        r4.metric("Absorption factor A", f"{report.transfer.absorption_factor:.4f}")
+
+        st.dataframe(pd.DataFrame([
+            {"Metric": "Equilibrium slope m", "Value": report.transfer.equilibrium_slope_m, "Unit": "y/x"},
+            {"Metric": "HTU_OG", "Value": report.transfer.HTU_OG_m, "Unit": "m"},
+            {"Metric": "NTU_OG", "Value": report.transfer.NTU_OG, "Unit": "—"},
+            {"Metric": "Outlet mgVOC/Nm³", "Value": report.gas_outlet_report.total_mgVOC_Nm3, "Unit": "mg/Nm³"},
+            {"Metric": "Wet pressure drop", "Value": report.hydraulics.pressure_drop.wet_pressure_drop_Pa_m, "Unit": "Pa/m"},
+            {"Metric": "Flooding", "Value": report.hydraulics.flooding.flooding_percent, "Unit": "%"},
+            {"Metric": "Mass-balance error", "Value": report.solver.diagnostics.relative_mass_balance_error, "Unit": "relative"},
+        ]), use_container_width=True, hide_index=True)
+
+        if report.transfer.absorption_factor < 1.0:
+            st.warning(
+                "For this water fixture A << 1, so physical absorption of VDC into water is thermodynamically difficult. "
+                "This is an engineering screening result; Henry-constant sensitivity and plant data should be reviewed before design decisions."
+            )
+
+    st.markdown("### Source / model provenance")
+    st.write(f"**Equilibrium:** {NIST_GOSSETT_SOURCE}")
+    st.write(f"**DG estimate basis:** {FULLER_SOURCE}")
+    st.write(f"**DL estimate basis:** {WILKE_CHANG_SOURCE}")
+    st.warning(
+        "Phase 12 does not calibrate the model to plant trials. DG and DL remain Confidence C estimates, and the published "
+        "Henry literature scatter is retained as an explicit uncertainty rather than hidden by tuning."
+    )
+
+
 with lookup_tab:
     st.subheader("Exact pair lookup — Phase 2 remains intact")
     c1, c2, c3 = st.columns(3)
@@ -1309,8 +1410,8 @@ with pair_tab:
     st.subheader("Solute–solvent equilibrium pairs")
     st.dataframe(equilibrium_df(DB), use_container_width=True, hide_index=True)
     st.info(
-        "Reference DG/DL values remain fixed exactly as in V3. Fuller and Wilke–Chang hooks exist in "
-        "the resolver architecture, but no default estimator is enabled yet."
+        "Reference ACN/VAc DG/DL values remain fixed exactly as in V3. For chemistry without a registered transport pair, "
+        "Phase 11+ may use Fuller/Wilke–Chang only when the required inputs exist; estimated values remain Confidence C."
     )
 
 with packing_tab:
@@ -1324,7 +1425,7 @@ with quality_tab:
 - **User override** has first priority and receives confidence class A for the active case.
 - If no override exists, the exact registered **database pair/property** is used.
 - Only when a database pair is absent may a configured **correlation estimator hook** be used.
-- Default Fuller and Wilke–Chang estimation are intentionally not activated in Phase 3.
+- Built-in Fuller and Wilke–Chang fallback estimation is active from Phase 11 onward, but only after user/database resolution fails and required inputs are complete.
 - If nothing can resolve a critical property, `MissingPropertyError` stops the path.
 - An override never mutates the underlying locked registry.
 - Reactive / explicitly unsupported equilibrium models are blocked rather than converted to Henry silently.
@@ -1347,6 +1448,9 @@ with quality_tab:
 - The parity fixture is tied to the locked reference source by SHA-256; future intentional physics revisions must create a new reference rather than silently moving this baseline.
 - Phase 10 verifies the full generic chain with fictional chemistry and audits generic physics modules for legacy chemical-name branching.
 - Synthetic-data PASS demonstrates architecture generality only; it is not real-system validation.
+- Phase 11 allows missing DG/DL to resolve through explicit Fuller/Wilke–Chang estimates when all required inputs exist.
+- Phase 12 adds VDC/water as the first real non-reference chemistry; equilibrium is literature/database based while DG/DL remain visible Confidence C estimates.
+- The Phase 12 applicability pre-check distinguishes an estimatable missing transport pair from truly missing critical data.
         """
     )
 
@@ -1386,10 +1490,11 @@ with quality_tab:
     st.success("PHASE9_FULL_V3_PARITY_GATE = PASS")
     st.success("PHASE10_SYNTHETIC_GENERIC_GATE = PASS")
     st.success("PHASE11_PROPERTY_ESTIMATION_GATE = PASS")
-    st.caption("104 automated tests pass in the packaged Phase 11 source tree; the Phase 9 parity harness still checks 82 locked V3 metrics independently.")
+    st.success("PHASE12_VDC_WATER_GATE = PASS")
+    st.caption("Phase 12 adds real VDC/water chemistry while preserving the locked 82-metric V3 parity baseline.")
 
 st.divider()
 st.caption(
-    "Generic Packed Absorber Simulator V4 · Phase 11 · Property Estimation Correlations · "
-    "Next: Phase 12 VDC / Water chemistry dataset"
+    "Generic Packed Absorber Simulator V4 · Phase 12 · VDC / Water Real-Chemistry Extension · "
+    "Next: Phase 13 VDC / Acrylonitrile solvent chemistry"
 )

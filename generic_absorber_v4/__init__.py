@@ -302,3 +302,48 @@ __all__.extend([
     "synthetic_boundaries",
     "synthetic_operating_point",
 ])
+
+# Phase 12 — first real non-reference chemistry: VDC / water
+from .vdc_water import (
+    AIR_FULLER_DIFFUSION_VOLUME,
+    FULLER_SOURCE,
+    NIST_GOSSETT_SOURCE,
+    PHASE12_VDC_WATER_CASE_ID,
+    VDC_CAS,
+    VDC_FORMULA,
+    VDC_FULLER_DIFFUSION_VOLUME,
+    VDC_ID,
+    VDC_KH_SOLUBILITY_MOL_KG_BAR_298,
+    VDC_LEBAS_BOILING_MOLAR_VOLUME_CM3_MOL,
+    VDC_MW_KG_MOL,
+    VDC_WATER_H_REF_PA_M3_MOL,
+    WATER_WILKE_CHANG_ASSOCIATION_FACTOR,
+    WILKE_CHANG_SOURCE,
+    VDCWaterReport,
+    build_vdc_water_registry,
+    run_vdc_water_case,
+    vdc_water_boundary,
+    vdc_water_operating_point,
+)
+
+__all__.extend([
+    "AIR_FULLER_DIFFUSION_VOLUME",
+    "FULLER_SOURCE",
+    "NIST_GOSSETT_SOURCE",
+    "PHASE12_VDC_WATER_CASE_ID",
+    "VDC_CAS",
+    "VDC_FORMULA",
+    "VDC_FULLER_DIFFUSION_VOLUME",
+    "VDC_ID",
+    "VDC_KH_SOLUBILITY_MOL_KG_BAR_298",
+    "VDC_LEBAS_BOILING_MOLAR_VOLUME_CM3_MOL",
+    "VDC_MW_KG_MOL",
+    "VDC_WATER_H_REF_PA_M3_MOL",
+    "WATER_WILKE_CHANG_ASSOCIATION_FACTOR",
+    "WILKE_CHANG_SOURCE",
+    "VDCWaterReport",
+    "build_vdc_water_registry",
+    "run_vdc_water_case",
+    "vdc_water_boundary",
+    "vdc_water_operating_point",
+])
