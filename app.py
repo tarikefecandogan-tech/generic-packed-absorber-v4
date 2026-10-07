@@ -182,6 +182,32 @@ except Exception as _phase18g_exc:
     phase18g_batch_rows = None
     run_phase18g_verified_batch_gate = None
 
+# Phase 18H is optional at startup for the same deployment-safety reason.
+# If this module is missing in a mixed GitHub deployment, the core simulator
+# and the Phase 18G historical snapshot remain usable.
+PHASE18H_AVAILABLE = False
+PHASE18H_IMPORT_ERROR = None
+try:
+    from generic_absorber_v4.verified_batch_v18h import (
+        PHASE18H_BATCH_ID,
+        PHASE18H_DATA_SNAPSHOT_ID,
+        PHASE18H_DATABASE_FILENAME,
+        PHASE18H_HENRY_SELECTION_RULE,
+        PHASE18H_VOCS,
+        phase18h_batch_rows,
+        run_phase18h_verified_batch_gate,
+    )
+    PHASE18H_AVAILABLE = True
+except Exception as _phase18h_exc:
+    PHASE18H_IMPORT_ERROR = f"{type(_phase18h_exc).__name__}: {_phase18h_exc}"
+    PHASE18H_BATCH_ID = "PHASE18H_UNAVAILABLE"
+    PHASE18H_DATA_SNAPSHOT_ID = "UNAVAILABLE"
+    PHASE18H_DATABASE_FILENAME = "absorber_database_v18h.db"
+    PHASE18H_HENRY_SELECTION_RULE = "UNAVAILABLE"
+    PHASE18H_VOCS = tuple()
+    phase18h_batch_rows = None
+    run_phase18h_verified_batch_gate = None
+
 st.set_page_config(
     page_title="Generic Packed Absorber Simulator V4",
     page_icon="🧪",
@@ -351,9 +377,9 @@ COUNTS = REGISTRY.inventory_counts()
 
 SIM_REGISTRY = build_phase14_registry()
 SIM_RESOLVER = PropertyResolver(SIM_REGISTRY)
-# Historical Phase-18D parity database stays frozen; product primary advances to v18G.
+# Historical Phase-18D parity database stays frozen; product primary advances to v18H.
 PHASE18D_DB_PATH = Path(__file__).resolve().parent / "database" / "absorber_database_v18b.db"
-PRIMARY_DB_PATH = Path(__file__).resolve().parent / "database" / PHASE18G_DATABASE_FILENAME
+PRIMARY_DB_PATH = Path(__file__).resolve().parent / "database" / (PHASE18H_DATABASE_FILENAME if PHASE18H_AVAILABLE else PHASE18G_DATABASE_FILENAME)
 PYTHON_DATA_REPOSITORY = build_python_registry_repository()
 PRIMARY_DATA_REPOSITORY, PRIMARY_CUTOVER_DECISION = select_primary_data_repository(
     PRIMARY_DB_PATH, allow_python_fallback=True
@@ -368,11 +394,11 @@ DATA_REPOSITORIES = {
 }
 
 st.title("🧪 Generic Packed Absorber Simulator V4")
-st.caption("Phase 18G — First Verified Chemical Expansion Batch · 18F import/loading repair preserved")
+st.caption("Phase 18H — Second Verified Industrial VOC Batch · 18F/18G deployment repair preserved")
 
 st.info(
-    "Phase 18G adds the first controlled real-chemistry expansion batch while preserving the Phase 18F safe-import and lazy-tab repair. "
-    "The primary SQLite snapshot now includes acetone, benzene, toluene, ethylbenzene and dichloromethane with traceable water-equilibrium provenance."
+    "Phase 18H adds a second controlled industrial-VOC batch on top of the repaired Phase 18G release. "
+    "The primary SQLite snapshot now contains 13 solutes; new water-equilibrium records cover MEK, chloroform, TCE, PCE and EDC while transport remains explicitly correlation-estimated."
 )
 
 with st.sidebar:
@@ -404,6 +430,10 @@ with st.sidebar:
         st.success("PHASE18G_FIRST_VERIFIED_CHEMICAL_BATCH_GATE = PASS")
     else:
         st.warning("PHASE18G feature module unavailable; core simulator remains usable")
+    if PHASE18H_AVAILABLE:
+        st.success("PHASE18H_SECOND_VERIFIED_INDUSTRIAL_VOC_BATCH_GATE = PASS")
+    else:
+        st.warning("PHASE18H feature module unavailable; Phase 18G/core simulator remains usable")
     st.metric("Reference ID", REGISTRY.reference_id)
     st.divider()
     st.caption("Resolution precedence")
@@ -1538,14 +1568,115 @@ if explorer_tab.open:
             )
 
 
-if verified_batch_tab.open and not PHASE18G_AVAILABLE:
+if verified_batch_tab.open and PHASE18H_AVAILABLE:
+    with verified_batch_tab:
+        st.subheader("Phase 18H — Second Verified Industrial VOC Expansion Batch")
+        st.caption(
+            "Five additional industrial VOCs added on top of the repaired Phase 18G snapshot using the same Phase 18F controlled import contract. "
+            "Water Henry equilibrium is database-backed (Confidence B); gas/liquid transport remains explicitly correlation-estimated (Confidence C)."
+        )
+
+        batch_db_path = PRIMARY_DB_PATH
+        if not batch_db_path.exists():
+            st.error(f"Phase 18H primary database not found: {batch_db_path}")
+        else:
+            batch_repo = SQLiteAbsorberRepositoryV18B(batch_db_path)
+            batch_meta = batch_repo.metadata()
+            batch_inv = batch_repo.inventory()
+            b1, b2, b3, b4 = st.columns(4)
+            b1.metric("Batch ID", "18H")
+            b2.metric("Total solutes", batch_inv.solutes)
+            b3.metric("Equilibrium pairs", batch_inv.equilibrium_pairs)
+            b4.metric("New VOCs", len(PHASE18H_VOCS))
+            st.caption(
+                f"Snapshot: {batch_meta.get('data_snapshot_id', '—')} · parent {batch_meta.get('parent_data_snapshot', '—')} · "
+                f"schema {batch_meta.get('schema_version', '—')} · integrity {batch_repo.integrity_check().upper()}"
+            )
+
+            st.markdown("### Phase 18H verified records")
+            st.dataframe(pd.DataFrame(phase18h_batch_rows()), use_container_width=True, hide_index=True)
+            st.caption(
+                "The NIST/Sander solubility-form Henry coefficient is converted to canonical Hpc using V4 water density at 298.15 K. "
+                "Fuller and Le Bas volumes are Confidence-C estimator inputs, not measured diffusivities."
+            )
+
+            with st.expander("Henry selection rule and provenance policy", expanded=True):
+                st.code(PHASE18H_HENRY_SELECTION_RULE, language=None)
+                st.write(
+                    "The Phase 18G selection rule is preserved unchanged: first method-L NIST/Sander row containing both kH° and its temperature coefficient. "
+                    "No literature averaging and no fabricated fixed transport pairs are introduced."
+                )
+
+            explorer18h = DatabaseExplorer.from_path(batch_db_path)
+            st.markdown("### Water coverage for the second batch")
+            coverage_rows18h = []
+            for rec in PHASE18H_VOCS:
+                c = explorer18h.coverage_cell(rec.solute_id, "water")
+                coverage_rows18h.append({
+                    "Solute": rec.solute_id,
+                    "Water coverage": c.display,
+                    "D_G": f"{c.gas_transport_tier} / {c.gas_transport_confidence}",
+                    "D_L": f"{c.liquid_transport_tier} / {c.liquid_transport_confidence}",
+                    "Equilibrium": f"{c.equilibrium_tier} / {c.equilibrium_confidence}",
+                })
+            st.dataframe(pd.DataFrame(coverage_rows18h), use_container_width=True, hide_index=True)
+
+            with st.expander("Phase 18G parent snapshot", expanded=False):
+                st.write(
+                    "The first verified batch remains in the same database: acetone, benzene, toluene, ethylbenzene and dichloromethane. "
+                    "Phase 18H adds records without overwriting those historical entries."
+                )
+
+            if st.button("Run Phase 18H verified-batch gate", type="primary", key="phase18h_gate_button"):
+                gate18h = run_phase18h_verified_batch_gate(batch_db_path)
+                if gate18h.pass_gate:
+                    st.success("PHASE18H_SECOND_VERIFIED_INDUSTRIAL_VOC_BATCH_GATE = PASS")
+                else:
+                    st.error("PHASE18H_SECOND_VERIFIED_INDUSTRIAL_VOC_BATCH_GATE = FAIL")
+                st.dataframe(pd.DataFrame([
+                    {"Check":"Phase 18G parent preserved", "PASS":gate18h.phase18g_preserved},
+                    {"Check":"Identity exactness", "PASS":gate18h.identity_ok},
+                    {"Check":"Henry exactness / Confidence B", "PASS":gate18h.henry_ok},
+                    {"Check":"Transport remains estimate / C", "PASS":gate18h.transport_estimated_c},
+                    {"Check":"Water coverage = ESTIMATED", "PASS":gate18h.water_coverage_estimated},
+                    {"Check":"ACN solvent coverage remains MISSING", "PASS":gate18h.acrylonitrile_coverage_missing},
+                    {"Check":"No fabricated fixed transport pairs", "PASS":gate18h.no_new_fixed_transport_pairs},
+                    {"Check":"Field-level provenance split", "PASS":gate18h.provenance_field_split_ok},
+                ]), use_container_width=True, hide_index=True)
+                st.markdown("#### 1000 ppmv water software fixtures")
+                st.dataframe(pd.DataFrame([
+                    {
+                        "Solute": r.solute_id,
+                        "Outlet ppmv": r.outlet_ppmv,
+                        "Removal %": 100*r.removal_fraction,
+                        "A": r.absorption_factor,
+                        "HTU (m)": r.HTU_OG_m,
+                        "NTU": r.NTU_OG,
+                        "Mass-balance error": r.mass_balance_error,
+                        "Readiness": r.readiness,
+                    } for r in gate18h.fixture_results
+                ]), use_container_width=True, hide_index=True)
+                st.caption("These deterministic fixtures validate the software/data chain; they are not plant-calibrated design guarantees.")
+
+            batch_path = Path(__file__).resolve().parent / "database" / "batches" / "phase18h_verified_batch.json"
+            if batch_path.exists():
+                st.download_button(
+                    "Download Phase 18H import package",
+                    data=batch_path.read_bytes(),
+                    file_name=batch_path.name,
+                    mime="application/json",
+                    key="phase18h_batch_download",
+                )
+
+
+if verified_batch_tab.open and not PHASE18G_AVAILABLE and not PHASE18H_AVAILABLE:
     with verified_batch_tab:
         st.subheader("Phase 18G — First Verified Chemical Expansion Batch")
         st.error("Phase 18G feature module is not available in this deployment, but the core simulator remains usable.")
         st.code(PHASE18G_IMPORT_ERROR or "Unknown Phase 18G import error")
         st.info("Replace the full release ZIP; do not mix app.py with an older generic_absorber_v4 package folder.")
 
-if verified_batch_tab.open and PHASE18G_AVAILABLE:
+if verified_batch_tab.open and PHASE18G_AVAILABLE and not PHASE18H_AVAILABLE:
     with verified_batch_tab:
         st.subheader("Phase 18G — First Verified Chemical Expansion Batch")
         st.caption(

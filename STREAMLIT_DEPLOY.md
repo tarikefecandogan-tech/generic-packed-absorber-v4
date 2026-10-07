@@ -235,3 +235,17 @@ After reboot, confirm:
 - Simulator primary backend is `SQLite Engineering Database v18G`;
 - Database Explorer shows 8 solutes;
 - the new **Verified Batch** tab opens and the Phase-18G gate passes.
+
+## Phase 18H deployment note
+
+Phase 18H primary database: `database/absorber_database_v18h.db`.
+
+This release is rebased on the accepted Phase-18F import/loading repair. Do **not** upload only `app.py` or only the new batch module. Replace the repository contents from the same Phase-18H ZIP (preserve `.git`), then commit/push and use **Manage app → Reboot app** in Streamlit Cloud.
+
+Critical same-release files include:
+
+- `app.py`
+- `generic_absorber_v4/repository.py`
+- `generic_absorber_v4/verified_batch_v18h.py`
+- `database/absorber_database_v18h.db`
+- `database/batches/phase18h_verified_batch.json`

@@ -1,3 +1,17 @@
+# Generic Packed Absorber Simulator V4 — Phase 18H
+
+Phase 18H adds the second verified industrial-VOC batch on top of the repaired Phase 18G release. The primary product database is now `database/absorber_database_v18h.db` and contains 13 solutes / 14 equilibrium pairs. New records: 2-butanone (MEK), chloroform, trichloroethylene (TCE), tetrachloroethylene (PCE), and 1,2-dichloroethane (EDC).
+
+**Current gates:** Phase 1–18H PASS · **226/226 tests PASS** · **82/82 locked V3 parity metrics PASS**.
+
+The Phase 18G Henry-selection policy is preserved unchanged (first NIST/Sander method-L row with both kH° and temperature coefficient). New gas/liquid transport coefficients remain visible Fuller/Wilke–Chang Confidence-C estimates rather than fabricated fixed pairs.
+
+This release also preserves the Phase-18F deployment repair: lazy top-level tabs and startup-safe optional feature imports. Deploy the whole release ZIP together.
+
+See `PHASE18H_STATUS.md` and `database/batches/phase18h_verified_batch.json`.
+
+---
+
 # Phase 18D update — SQLite primary read source
 
 Phase 18D performs the controlled product-facing cut-over to `database/absorber_database_v18b.db`. The Streamlit Simulator now uses the validated SQLite database by default, while the verified Python Registry remains available as a reference and explicit controlled fallback. SQLite activation requires integrity, foreign-key, schema-version and full registry-reconstruction checks.
