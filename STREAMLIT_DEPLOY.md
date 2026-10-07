@@ -43,3 +43,15 @@ The Phase 12 package adds `generic_absorber_v4/vdc_water.py` and updates `generi
 After push/redeploy, confirm the sidebar shows `PHASE13_VDC_ACN_GATE = PASS` and a `VDC / Acrylonitrile` tab is visible.
 
 Upload the complete Phase 13 package rather than only `vdc_acn.py`; `app.py` and `generic_absorber_v4/__init__.py` must be from the same Phase 13 package to avoid mixed-version import errors. If Streamlit Cloud keeps an older module in memory, use **Manage app → Reboot app**.
+
+## Phase 15 update
+
+Upload the complete Phase 15 package over the existing repository. In particular, keep these files from the same Phase 15 package:
+
+- `app.py`
+- `generic_absorber_v4/__init__.py`
+- `generic_absorber_v4/methods.py`
+- `tests/test_phase15_live_methods.py`
+- `PHASE15_STATUS.md`
+
+After deploy, run a case under **Simulator**, then open **Methods & Assumptions**. The audit should update to that exact case. If Streamlit Cloud keeps an old module cached, use **Manage app → Reboot app**.

@@ -80,6 +80,8 @@ from generic_absorber_v4 import (
     build_phase14_registry,
     compatible_solutes,
     run_generic_absorber_case,
+    PHASE15_LIVE_METHODS_ID,
+    build_live_methods_report,
 )
 
 st.set_page_config(
@@ -253,12 +255,13 @@ SIM_REGISTRY = build_phase14_registry()
 SIM_RESOLVER = PropertyResolver(SIM_REGISTRY)
 
 st.title("🧪 Generic Packed Absorber Simulator V4")
-st.caption("Phase 14 — Integrated Generic Absorber User Interface")
+st.caption("Phase 15 — Integrated Simulator + Live Methods & Assumptions")
 
 st.info(
-    "Phase 14 integrates the verified V4 layers into one product-facing simulator. "
-    "The main Simulator tab runs registry → resolver → Onda → counter-current ODE → units → hydraulics → applicability. "
-    "Development/validation tabs remain available for auditability."
+    "Phase 15 keeps the integrated simulator and adds a live engineering audit trail. "
+    "The Methods & Assumptions tab is generated from the current simulation result, so equations, property sources, "
+    "resolution tiers, confidence, assumptions and diagnostics change with the selected case. "
+    "No physics is recalculated by the audit layer."
 )
 
 with st.sidebar:
@@ -277,6 +280,7 @@ with st.sidebar:
     st.success("PHASE12_VDC_WATER_GATE = PASS")
     st.success("PHASE13_VDC_ACN_GATE = PASS")
     st.success("PHASE14_INTEGRATED_SIMULATOR_GATE = PASS")
+    st.success("PHASE15_LIVE_METHODS_GATE = PASS")
     st.metric("Reference ID", REGISTRY.reference_id)
     st.divider()
     st.caption("Resolution precedence")
@@ -288,6 +292,7 @@ with st.sidebar:
 
 (
     simulator_tab,
+    methods_tab,
     overview_tab,
     resolver_tab,
     mass_transfer_tab,
@@ -308,6 +313,7 @@ with st.sidebar:
     quality_tab,
 ) = st.tabs([
     "Simulator",
+    "Methods & Assumptions",
     "Overview",
     "Property Resolver",
     "Mass Transfer",
@@ -331,8 +337,9 @@ with st.sidebar:
 with simulator_tab:
     st.subheader("Integrated Generic Absorber Simulator")
     st.caption(
-        "This is the product-facing Phase 14 workflow. The UI only prepares canonical inputs; "
-        "all physics is executed by generic_absorber_v4.simulation.run_generic_absorber_case()."
+        "This is the product-facing integrated workflow. The UI prepares canonical inputs; "
+        "all physics is executed by generic_absorber_v4.simulation.run_generic_absorber_case(). "
+        "Phase 15 then builds the live Methods & Assumptions audit directly from that result."
     )
 
     st.markdown("### 1. Chemistry & equipment")
@@ -699,8 +706,105 @@ with simulator_tab:
                 )
 
         st.caption(
-            "Phase 14 is a rating simulator. Required-height design, solvent evaporation, coupled nonideal VLE, "
-            "reaction and energy balance are not yet part of the integrated workflow."
+            "Phase 15 remains a rating simulator. Required-height design, solvent evaporation, coupled nonideal VLE, "
+            "reaction and energy balance are not yet part of the integrated workflow. See Methods & Assumptions for the live audit trail."
+        )
+
+
+with methods_tab:
+    st.subheader("Live Methods & Assumptions")
+    st.caption(
+        "This audit trail is generated from the latest integrated Simulator result. It does not run a second calculation. "
+        "Change the chemistry, operating conditions, packing, feed or solvent loading in Simulator and rerun the case; "
+        "this page updates automatically."
+    )
+
+    live_result = st.session_state.get("phase14_result")
+    if live_result is None:
+        st.info("Run a case in the Simulator tab first. The live audit trail will then appear here.")
+    else:
+        audit = build_live_methods_report(live_result)
+        st.success(f"{audit.report_id} · LIVE REPORT READY")
+
+        st.markdown("### Active case")
+        for item in audit.summary:
+            st.write(f"- {item}")
+
+        st.markdown("### Calculation methods and equations")
+        for section in audit.sections:
+            rows = [x for x in audit.equations if x.section == section]
+            with st.expander(section, expanded=section.startswith("1.") or section.startswith("2.")):
+                st.dataframe(pd.DataFrame([
+                    {
+                        "Method / quantity": x.title,
+                        "Equation": x.equation,
+                        "Active method": x.active_method,
+                        "Live value": x.live_value,
+                        "Engineering note": x.note or "—",
+                    }
+                    for x in rows
+                ]), use_container_width=True, hide_index=True)
+
+        st.markdown("### Resolved property provenance")
+        st.caption(
+            "Every critical property shows the actual selection path used by the current case: "
+            "USER_OVERRIDE > DATABASE > CORRELATION_ESTIMATE > MISSING."
+        )
+        st.dataframe(pd.DataFrame([
+            {
+                "Scope": x.scope,
+                "Property": x.property_name,
+                "Value": x.value,
+                "Unit": x.unit,
+                "Tier": x.tier,
+                "Confidence": x.confidence,
+                "Method": x.method,
+                "Source": x.source,
+                "Estimated": x.estimated,
+                "Note": x.note or "—",
+            }
+            for x in audit.properties
+        ]), use_container_width=True, hide_index=True)
+
+        st.markdown("### Active assumptions and model limits")
+        st.dataframe(pd.DataFrame([
+            {
+                "Category": x.category,
+                "Assumption / scope item": x.assumption,
+                "Current state": x.state,
+                "Consequence": x.consequence,
+            }
+            for x in audit.assumptions
+        ]), use_container_width=True, hide_index=True)
+
+        st.markdown("### Numerical and validity diagnostics")
+        st.dataframe(pd.DataFrame([
+            {
+                "Scope": x.scope,
+                "Diagnostic": x.diagnostic,
+                "Live value": x.value,
+                "Interpretation": x.interpretation,
+            }
+            for x in audit.diagnostics
+        ]), use_container_width=True, hide_index=True)
+
+        st.markdown("### Applicability issues for this exact case")
+        if live_result.post_applicability.issues:
+            st.dataframe(pd.DataFrame([
+                {
+                    "Severity": i.severity.value,
+                    "Code": i.code,
+                    "Scope": i.scope,
+                    "Message": i.message,
+                }
+                for i in live_result.post_applicability.issues
+            ]), use_container_width=True, hide_index=True)
+        else:
+            st.success("No applicability issues were reported for this case.")
+
+        st.info(
+            "Interpretation rule: this page documents the method actually used for the current calculation. "
+            "A correlation appearing here does not imply design-grade validity; always read its source, confidence and applicability messages together."
         )
 
 
@@ -773,6 +877,11 @@ literature bulk AN properties + explicit Confidence D equilibrium surrogate
 Phase 14 Integrated Generic Simulator
         ↓
 one product-facing case: inputs → full simulation → results + validity
+        ↓
+Phase 15 Live Methods & Assumptions
+        ↓
+current case → equations + provenance + active assumptions + diagnostics
+report-only audit layer; no physics recalculation
 
 No required-height design yet.""",
         language="text",
@@ -2010,10 +2119,11 @@ with quality_tab:
     st.success("PHASE12_VDC_WATER_GATE = PASS")
     st.success("PHASE13_VDC_ACN_GATE = PASS")
     st.success("PHASE14_INTEGRATED_SIMULATOR_GATE = PASS")
-    st.caption("Phase 14 integrates the full registered chemistry catalog into one product-facing simulation workflow while preserving the locked V3 parity baseline.")
+    st.success("PHASE15_LIVE_METHODS_GATE = PASS")
+    st.caption("Phase 15 adds a live case-specific engineering audit trail without duplicating or recalculating the physics chain.")
 
 st.divider()
 st.caption(
-    "Generic Packed Absorber Simulator V4 · Phase 14 · Integrated Generic Absorber Interface · "
-    "Next: Phase 15 Live Methods & Assumptions audit trail"
+    "Generic Packed Absorber Simulator V4 · Phase 15 · Integrated Simulator + Live Methods & Assumptions · "
+    "Next: Phase 16 parameter sweep / sensitivity workflows"
 )

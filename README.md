@@ -71,3 +71,9 @@ Data governance is intentionally conservative:
 The deterministic Phase 13 fixture uses the same column/flow basis as Phase 12 so the solvent effect is easy to compare. The screening calculation predicts much stronger VDC uptake into AN than water, but this is not design validation until direct VDC/AN equilibrium data and solvent evaporation are represented.
 
 The project pilot trial (300 L/h N2, 18 L/h AN, final liquid 93.84% AN / 6.16% VDC, outlet 1100 ppm VOC) is preserved as external qualitative evidence only. It is not used to fit the equilibrium slope because the available slide summary does not document inlet VDC and a complete material-balance basis.
+
+## Phase 15 — Live Methods & Assumptions
+
+Phase 15 adds `generic_absorber_v4/methods.py`, a report-only engineering audit layer for the integrated Simulator. After a case is run, **Methods & Assumptions** displays the equations actually used, live numerical results, resolved property provenance, correlation/estimate tiers, active assumptions, solver closure diagnostics, hydraulic diagnostics, applicability issues, and confidence ratings. The audit consumes the existing simulation result and does not duplicate the physics calculation.
+
+Phase 15 validation: **127/127 automated tests PASS**; locked V3 parity remains **82/82 PASS**.

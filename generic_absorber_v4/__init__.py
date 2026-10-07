@@ -1,4 +1,4 @@
-"""Generic Packed Absorber Simulator V4 — Phase 13 VDC/acrylonitrile screening extension."""
+"""Generic Packed Absorber Simulator V4 — Phase 15 integrated simulator with live engineering audit trail."""
 
 from .models import (
     CarrierGasSpec,
@@ -430,4 +430,25 @@ __all__.extend([
     "build_phase14_registry",
     "compatible_solutes",
     "run_generic_absorber_case",
+])
+
+# Phase 15 — live Methods & Assumptions / engineering audit trail
+from .methods import (
+    PHASE15_LIVE_METHODS_ID,
+    AssumptionAuditRow,
+    DiagnosticAuditRow,
+    LiveMethodsReport,
+    MethodEquation,
+    PropertyAuditRow,
+    build_live_methods_report,
+)
+
+__all__.extend([
+    "PHASE15_LIVE_METHODS_ID",
+    "AssumptionAuditRow",
+    "DiagnosticAuditRow",
+    "LiveMethodsReport",
+    "MethodEquation",
+    "PropertyAuditRow",
+    "build_live_methods_report",
 ])
