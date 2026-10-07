@@ -127,3 +127,25 @@ Checks include:
 - Historical Phase 18C repository parity: **5/5 scenarios, 119/119 numerical metrics exact match**
 - Phase 1–18G gate scripts: **PASS**
 - `app.py` package import surface: **123/123 imported names available**
+
+## 18F repair rebase (deployment hardening)
+
+This Phase-18G delivery was rebuilt on top of the accepted Phase-18F Streamlit import/loading repair after the original Phase-18G package had been generated.
+
+Preserved hardening:
+
+- top-level Streamlit tabs remain lazy (`on_change="rerun"` + `.open` guards);
+- Phase-18F `chemical_import` is an optional safe import at startup, so a mixed deployment cannot crash the core simulator;
+- Phase-18G `verified_batch_v18g` is also startup-safe; if missing, only the Verified Batch feature is disabled;
+- the current product database is `absorber_database_v18g.db`, while the frozen v18B database remains for historical parity gates;
+- full-package deployment is still required to avoid mixed-version GitHub/Streamlit states.
+
+Rebased verification:
+
+- 206/206 tests PASS;
+- Phase-18F gate PASS;
+- Phase-18G gate PASS;
+- locked V3 parity 82/82 PASS;
+- `app.py` compiles;
+- root package imports have no missing names;
+- direct imports of `generic_absorber_v4.chemical_import` and `generic_absorber_v4.verified_batch_v18g` PASS.

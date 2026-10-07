@@ -212,3 +212,7 @@ Phase 18G uses the controlled Phase-18F import framework to add the first five r
 The product primary database is now `database/absorber_database_v18g.db`. The frozen `absorber_database_v18b.db` remains packaged for historical Python↔SQLite parity gates.
 
 Current regression state: **206/206 tests PASS** and **82/82 locked V3 parity metrics PASS**. See `PHASE18G_STATUS.md` and `database/batches/phase18g_verified_batch.json` for the auditable batch record.
+
+## Phase 18G deployment-hardening note
+
+This release is rebased on the Phase-18F Streamlit import/loading repair. Keep the whole ZIP together when deploying: `app.py`, `generic_absorber_v4/`, and `database/` must come from the same release. Top-level tabs are lazy-loaded and Phase-18F/18G feature imports are startup-safe so an optional feature mismatch does not take down the core simulator.
