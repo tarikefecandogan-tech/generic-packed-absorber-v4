@@ -124,6 +124,13 @@ from generic_absorber_v4 import (
     run_phase18d_cutover_gate,
 )
 
+from generic_absorber_v4 import (
+    PHASE18E_DATABASE_EXPLORER_ID,
+    CoverageStatus,
+    DatabaseExplorer,
+    run_phase18e_explorer_gate,
+)
+
 st.set_page_config(
     page_title="Generic Packed Absorber Simulator V4",
     page_icon="🧪",
@@ -309,11 +316,11 @@ DATA_REPOSITORIES = {
 }
 
 st.title("🧪 Generic Packed Absorber Simulator V4")
-st.caption("Phase 18D — SQLite Primary Read Source & Controlled Cut-over")
+st.caption("Phase 18E — Engineering Database Explorer & Coverage Matrix")
 
 st.info(
-    "Phase 18D makes the validated SQLite engineering database the product-facing primary read source. "
-    "The verified Python registry remains a reference and controlled fallback backend; physics equations are unchanged."
+    "Phase 18E adds a read-only engineering Database Explorer on top of the validated SQLite primary source. "
+    "It maps chemistry coverage as VERIFIED / ESTIMATED / SCREENING / MISSING without changing absorber physics."
 )
 
 with st.sidebar:
@@ -339,6 +346,7 @@ with st.sidebar:
     st.success("PHASE18B_STRUCTURED_PROVENANCE_GATE = PASS")
     st.success("PHASE18C_REPOSITORY_ABSTRACTION_GATE = PASS")
     st.success("PHASE18D_SQLITE_PRIMARY_CUTOVER_GATE = PASS")
+    st.success("PHASE18E_DATABASE_EXPLORER_GATE = PASS")
     st.metric("Reference ID", REGISTRY.reference_id)
     st.divider()
     st.caption("Resolution precedence")
@@ -355,6 +363,7 @@ with st.sidebar:
     comparison_tab,
     database_tab,
     provenance_tab,
+    explorer_tab,
     repository_tab,
     overview_tab,
     resolver_tab,
@@ -381,6 +390,7 @@ with st.sidebar:
     "Comparison",
     "Database Migration",
     "Data Provenance",
+    "Database Explorer",
     "Repository Backends",
     "Overview",
     "Property Resolver",
@@ -1194,8 +1204,8 @@ with comparison_tab:
 with database_tab:
     st.subheader("Phase 18A — SQLite Database Migration")
     st.caption(
-        "This is the migration/audit view, not yet the final Database Explorer. "
-        "The solver still defaults to the verified Python registry; this page proves the SQLite snapshot can reconstruct it exactly."
+        "Historical migration/audit view from Phase 18A. The product-facing simulator now defaults to the validated SQLite database (Phase 18D); "
+        "this page remains available to prove the original registry ↔ SQLite round-trip parity."
     )
 
     db_path = Path(__file__).resolve().parent / "database" / "absorber_database.db"
@@ -1246,8 +1256,8 @@ with database_tab:
             st.dataframe(pd.DataFrame(db_repo.list_sources()), use_container_width=True, hide_index=True)
 
         st.info(
-            "Phase 18A intentionally does not switch the production solver to SQLite yet. "
-            "Cut-over comes only after repository abstraction and full old-registry == database regression gates."
+            "This tab preserves the original Phase 18A migration evidence. The production cut-over was completed later in Phase 18D; "
+            "Phase 18E adds the read-only Database Explorer without modifying this historical parity gate."
         )
 
 
@@ -1316,6 +1326,148 @@ with provenance_tab:
         st.info(
             "Phase 18B improves traceability but does not claim all scientific data are fully literature-verified. "
             "Internal legacy and screening-surrogate sources remain explicitly labeled, while missing/weak areas are targets for later database expansion."
+        )
+
+
+with explorer_tab:
+    st.subheader("Phase 18E — Database Explorer & Coverage Matrix")
+    st.caption(
+        "Read-only exploration of the primary SQLite engineering database. Coverage is evaluated at an explicit audit state and selected carrier; "
+        "this page does not calculate absorber removal or alter the database."
+    )
+
+    explorer_db_path = Path(__file__).resolve().parent / "database" / "absorber_database_v18b.db"
+    if not explorer_db_path.exists():
+        st.error(f"Primary engineering database not found: {explorer_db_path}")
+    else:
+        db_explorer = DatabaseExplorer.from_path(explorer_db_path)
+        exp_inv = db_explorer.repository.inventory()
+        exp_meta = db_explorer.repository.metadata()
+
+        e1, e2, e3, e4, e5 = st.columns(5)
+        e1.metric("Solutes", exp_inv.solutes)
+        e2.metric("Solvents", exp_inv.solvents)
+        e3.metric("Carriers", exp_inv.carriers)
+        e4.metric("Packings", exp_inv.packings)
+        e5.metric("Equilibrium pairs", exp_inv.equilibrium_pairs)
+        st.caption(
+            f"Database: {exp_meta.get('database_id', '—')} · schema {exp_meta.get('schema_version', '—')} · "
+            f"integrity {db_explorer.repository.integrity_check().upper()}"
+        )
+
+        cov_tab, chem_tab, pairdata_tab, packdb_tab, search_tab, gaps_tab = st.tabs([
+            "Coverage Matrix", "Chemical Catalog", "Pair Data", "Packings", "Search", "Data Gaps"
+        ])
+
+        with cov_tab:
+            st.markdown("### Solute × solvent coverage")
+            carrier_options = sorted(db_explorer.registry.carriers)
+            c1, c2, c3 = st.columns(3)
+            cov_carrier = c1.selectbox("Carrier gas", carrier_options, index=0, key="phase18e_cov_carrier")
+            cov_T_C = c2.number_input("Coverage audit temperature (°C)", value=25.0, step=1.0, key="phase18e_cov_T")
+            cov_P_bar = c3.number_input("Coverage audit pressure (bar abs)", value=1.01325, min_value=0.05, step=0.1, format="%.5f", key="phase18e_cov_P")
+            cov_T_K = float(cov_T_C) + 273.15
+            cov_P_Pa = float(cov_P_bar) * 1e5
+
+            cov_summary = db_explorer.coverage_summary(carrier_id=cov_carrier, T_K=cov_T_K, P_Pa=cov_P_Pa)
+            m1, m2, m3, m4, m5 = st.columns(5)
+            m1.metric("🟢 Verified", cov_summary.verified)
+            m2.metric("🟡 Estimated", cov_summary.estimated)
+            m3.metric("🟠 Screening", cov_summary.screening)
+            m4.metric("🔴 Missing", cov_summary.missing)
+            m5.metric("Resolvable", f"{100*cov_summary.resolvable_fraction:.1f}%")
+
+            matrix_df = pd.DataFrame(db_explorer.coverage_matrix_rows(
+                carrier_id=cov_carrier, T_K=cov_T_K, P_Pa=cov_P_Pa
+            ))
+            st.dataframe(matrix_df, use_container_width=True, hide_index=True)
+            st.caption(
+                "🟢 VERIFIED = database equilibrium + database transport; "
+                "🟡 ESTIMATED = trusted equilibrium but Fuller/Wilke–Chang transport estimate; "
+                "🟠 SCREENING = Confidence-D equilibrium/surrogate; 🔴 MISSING = critical data cannot be resolved."
+            )
+
+            with st.expander("Detailed coverage audit", expanded=False):
+                detail_df = pd.DataFrame(db_explorer.detailed_coverage_rows(
+                    carrier_id=cov_carrier, T_K=cov_T_K, P_Pa=cov_P_Pa
+                ))
+                st.dataframe(detail_df, use_container_width=True, hide_index=True)
+
+        with chem_tab:
+            st.markdown("### Pure-component catalog")
+            chemical_view = st.radio(
+                "Catalog", ["Solutes", "Solvents", "Carrier gases"], horizontal=True, key="phase18e_chemical_view"
+            )
+            if chemical_view == "Solutes":
+                st.dataframe(pd.DataFrame(db_explorer.list_solutes()), use_container_width=True, hide_index=True)
+            elif chemical_view == "Solvents":
+                st.dataframe(pd.DataFrame(db_explorer.list_solvents()), use_container_width=True, hide_index=True)
+            else:
+                st.dataframe(pd.DataFrame(db_explorer.list_carriers()), use_container_width=True, hide_index=True)
+
+        with pairdata_tab:
+            st.markdown("### Binary pair data")
+            eq_db_tab, dg_db_tab, dl_db_tab = st.tabs(["Equilibrium", "Gas transport", "Liquid transport"])
+            with eq_db_tab:
+                st.dataframe(pd.DataFrame(db_explorer.list_equilibrium_pairs()), use_container_width=True, hide_index=True)
+            with dg_db_tab:
+                st.dataframe(pd.DataFrame(db_explorer.list_gas_transport_pairs()), use_container_width=True, hide_index=True)
+                st.caption("Missing registered D_G can still be resolvable through Fuller when required pure-component inputs exist.")
+            with dl_db_tab:
+                st.dataframe(pd.DataFrame(db_explorer.list_liquid_transport_pairs()), use_container_width=True, hide_index=True)
+                st.caption("Missing registered D_L can still be resolvable through Wilke–Chang when required solute/solvent inputs exist.")
+
+        with packdb_tab:
+            st.markdown("### Packing catalog")
+            packing_db_df = pd.DataFrame(db_explorer.list_packings())
+            st.dataframe(packing_db_df, use_container_width=True, hide_index=True)
+            empirical_n = int((packing_db_df["packing_factor_basis"] != "geometric_fallback").sum()) if not packing_db_df.empty else 0
+            fallback_n = int((packing_db_df["packing_factor_basis"] == "geometric_fallback").sum()) if not packing_db_df.empty else 0
+            p1, p2 = st.columns(2)
+            p1.metric("Empirical/literature Fp", empirical_n)
+            p2.metric("Geometric Fp fallback", fallback_n)
+
+        with search_tab:
+            st.markdown("### Search the engineering catalog")
+            query18e = st.text_input("Search ID, name, CAS, DOI, source or pair", value="VDC", key="phase18e_search")
+            if query18e.strip():
+                search_df = pd.DataFrame(db_explorer.search(query18e))
+                if search_df.empty:
+                    st.warning("No matching database records.")
+                else:
+                    st.dataframe(search_df, use_container_width=True, hide_index=True)
+
+        with gaps_tab:
+            st.markdown("### Data-expansion backlog")
+            st.caption(
+                "Priority 1 = truly missing critical data; Priority 3 = screening thermodynamics; Priority 4 = correlation-estimated transport. "
+                "This backlog is intended to guide literature/vendor-data expansion, not rank solvent performance."
+            )
+            gap_carrier = st.selectbox("Carrier for backlog", sorted(db_explorer.registry.carriers), index=0, key="phase18e_gap_carrier")
+            backlog_df = pd.DataFrame(db_explorer.missing_data_backlog(carrier_id=gap_carrier))
+            st.dataframe(backlog_df, use_container_width=True, hide_index=True)
+
+            if st.button("Run Phase 18E explorer gate", key="phase18e_gate_button"):
+                gate18e = run_phase18e_explorer_gate(explorer_db_path)
+                if gate18e.pass_gate:
+                    st.success("PHASE18E_DATABASE_EXPLORER_GATE = PASS")
+                else:
+                    st.error("PHASE18E_DATABASE_EXPLORER_GATE = FAIL")
+                st.write({
+                    "integrity": gate18e.integrity,
+                    "foreign_key_violations": gate18e.foreign_key_violations,
+                    "matrix_cells": gate18e.matrix_cells,
+                    "search_vdc_hits": gate18e.search_vdc_hits,
+                    "database_unchanged": gate18e.database_unchanged,
+                })
+                st.dataframe(pd.DataFrame([
+                    {"Check": k, "Result": "PASS" if v else "FAIL"}
+                    for k, v in gate18e.expected_reference_statuses.items()
+                ]), use_container_width=True, hide_index=True)
+
+        st.info(
+            "Phase 18E is deliberately read-only. A green cell means the current database can resolve the critical pair data without transport estimates; "
+            "it does not by itself mean the absorber design is valid. Applicability, hydraulics and performance remain separate checks."
         )
 
 

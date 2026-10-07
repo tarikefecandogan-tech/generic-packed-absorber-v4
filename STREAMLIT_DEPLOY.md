@@ -174,3 +174,21 @@ The Simulator now selects the Phase-18D primary repository by default. At app st
 If SQLite cannot be validated, the app does **not** pretend SQLite is active. With the standard UI policy it switches to an explicitly labelled `CONTROLLED_FALLBACK` Python Registry and displays the reason. Phase-18D strict-mode API calls can instead raise an error and stop.
 
 After updating GitHub, use **Manage app → Reboot app** if Streamlit is still holding an older module graph.
+
+## Phase 18E — Database Explorer & Coverage Matrix
+
+Upload the **complete Phase 18E package** over the existing repository. Keep these files version-aligned:
+
+- `app.py`
+- `generic_absorber_v4/__init__.py`
+- `generic_absorber_v4/database_explorer.py`
+- `database/absorber_database_v18b.db`
+- `tests/test_phase18e_database_explorer.py`
+- `phase18e_check.py`
+- `PHASE18E_STATUS.md`
+
+Recommended commit message:
+
+`Phase 18E - database explorer and coverage matrix`
+
+After deployment, use **Manage app → Reboot app** if Streamlit is retaining an older module graph. Confirm the sidebar shows `PHASE18E_DATABASE_EXPLORER_GATE = PASS`, then open **Database Explorer**. The default Air / 25 °C / 1.01325 bar coverage matrix should classify ACN/Water and VAc/Water as VERIFIED, VDC/Water as ESTIMATED, VDC/Acrylonitrile as SCREENING, and ACN/VAc with Acrylonitrile as MISSING.

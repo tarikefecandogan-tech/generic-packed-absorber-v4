@@ -166,3 +166,22 @@ The project pilot trial (300 L/h N2, 18 L/h AN, final liquid 93.84% AN / 6.16% V
 Phase 15 adds `generic_absorber_v4/methods.py`, a report-only engineering audit layer for the integrated Simulator. After a case is run, **Methods & Assumptions** displays the equations actually used, live numerical results, resolved property provenance, correlation/estimate tiers, active assumptions, solver closure diagnostics, hydraulic diagnostics, applicability issues, and confidence ratings. The audit consumes the existing simulation result and does not duplicate the physics calculation.
 
 Phase 15 validation: **127/127 automated tests PASS**; locked V3 parity remains **82/82 PASS**.
+
+---
+
+# Generic Packed Absorber Simulator V4 — Phase 18E
+
+Phase 18E adds a read-only **Database Explorer & Coverage Matrix** on top of the SQLite primary engineering database.
+
+**Current gates:** Phase 1–18E PASS · **177/177 tests PASS** · **82/82 locked V3 parity metrics PASS**.
+
+New explorer capabilities:
+
+- browse solutes, solvents, carrier gases and packings;
+- inspect registered equilibrium / gas-transport / liquid-transport pairs;
+- search IDs, names, CAS/source/DOI text across the catalog;
+- display a carrier-aware solute × solvent coverage matrix;
+- distinguish VERIFIED, ESTIMATED, SCREENING, MISSING and UNSUPPORTED data paths;
+- generate a prioritized missing-data / data-quality backlog.
+
+The explorer is deliberately read-only and does not calculate absorber performance. See `PHASE18E_STATUS.md` for the current coverage snapshot and acceptance gate.
