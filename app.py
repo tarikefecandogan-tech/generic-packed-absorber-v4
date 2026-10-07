@@ -82,6 +82,13 @@ from generic_absorber_v4 import (
     run_generic_absorber_case,
     PHASE15_LIVE_METHODS_ID,
     build_live_methods_report,
+    PHASE16_PARAMETER_SWEEP_ID,
+    MAX_SWEEP_POINTS,
+    SweepAxis,
+    SweepVariable,
+    InvalidSweepDefinition,
+    run_parameter_sweep,
+    suggested_sweep_bounds,
 )
 
 st.set_page_config(
@@ -255,13 +262,12 @@ SIM_REGISTRY = build_phase14_registry()
 SIM_RESOLVER = PropertyResolver(SIM_REGISTRY)
 
 st.title("🧪 Generic Packed Absorber Simulator V4")
-st.caption("Phase 15 — Integrated Simulator + Live Methods & Assumptions")
+st.caption("Phase 16 — Integrated Simulator + Live Methods + Parameter Sweep")
 
 st.info(
-    "Phase 15 keeps the integrated simulator and adds a live engineering audit trail. "
-    "The Methods & Assumptions tab is generated from the current simulation result, so equations, property sources, "
-    "resolution tiers, confidence, assumptions and diagnostics change with the selected case. "
-    "No physics is recalculated by the audit layer."
+    "Phase 16 keeps the integrated simulator and live engineering audit trail, and adds full-physics parameter sweeps. "
+    "Every sweep point reruns property resolution, Onda/two-film transfer, counter-current ODEs, hydraulics, unit reconstruction "
+    "and applicability. Sweep logic does not contain a simplified absorber equation."
 )
 
 with st.sidebar:
@@ -281,6 +287,7 @@ with st.sidebar:
     st.success("PHASE13_VDC_ACN_GATE = PASS")
     st.success("PHASE14_INTEGRATED_SIMULATOR_GATE = PASS")
     st.success("PHASE15_LIVE_METHODS_GATE = PASS")
+    st.success("PHASE16_PARAMETER_SWEEP_GATE = PASS")
     st.metric("Reference ID", REGISTRY.reference_id)
     st.divider()
     st.caption("Resolution precedence")
@@ -293,6 +300,7 @@ with st.sidebar:
 (
     simulator_tab,
     methods_tab,
+    sweep_tab,
     overview_tab,
     resolver_tab,
     mass_transfer_tab,
@@ -314,6 +322,7 @@ with st.sidebar:
 ) = st.tabs([
     "Simulator",
     "Methods & Assumptions",
+    "Parameter Sweep",
     "Overview",
     "Property Resolver",
     "Mass Transfer",
@@ -339,7 +348,7 @@ with simulator_tab:
     st.caption(
         "This is the product-facing integrated workflow. The UI prepares canonical inputs; "
         "all physics is executed by generic_absorber_v4.simulation.run_generic_absorber_case(). "
-        "Phase 15 then builds the live Methods & Assumptions audit directly from that result."
+        "Phase 15 builds the live Methods & Assumptions audit from that result; Phase 16 can reuse the same case as a sweep baseline."
     )
 
     st.markdown("### 1. Chemistry & equipment")
@@ -706,9 +715,218 @@ with simulator_tab:
                 )
 
         st.caption(
-            "Phase 15 remains a rating simulator. Required-height design, solvent evaporation, coupled nonideal VLE, "
-            "reaction and energy balance are not yet part of the integrated workflow. See Methods & Assumptions for the live audit trail."
+            "Phase 16 remains a rating simulator. Parameter sweeps rerun the full rating model at every point; they are not an optimizer. "
+            "Required-height design, solvent evaporation, coupled nonideal VLE, reaction and energy balance are not yet part of the integrated workflow."
         )
+
+
+with sweep_tab:
+    st.subheader("Parameter Sweep / Sensitivity Analysis")
+    st.caption(
+        "Start from the latest Simulator case and vary one or two numerical parameters. "
+        "Every grid point calls the same integrated V4 solver again: properties → Onda → ODE → hydraulics → units → applicability."
+    )
+
+    sweep_base_result = st.session_state.get("phase14_result")
+    if sweep_base_result is None:
+        st.info("Run a case in the Simulator tab first. That case becomes the baseline for the sweep.")
+    else:
+        base_case = sweep_base_result.case
+        st.success(
+            f"Baseline loaded · {', '.join(base_case.solute_ids)} / "
+            f"{sweep_base_result.registry.get_solvent(base_case.solvent_id).name} · "
+            f"status {sweep_base_result.post_applicability.status.value}"
+        )
+        st.caption(
+            "Sweep axes operate on the canonical integrated case. In particular, temperature/pressure sweeps hold the current "
+            "**actual gas volumetric flow** constant unless gas flow itself is selected as an axis."
+        )
+
+        sweep_mode = st.radio("Sweep dimension", ["1D", "2D"], horizontal=True, key="phase16_sweep_mode")
+        sweep_variables = list(SweepVariable)
+        var_labels = {v: f"{v.label} [{v.unit}]" for v in sweep_variables}
+
+        a1c1, a1c2, a1c3, a1c4 = st.columns(4)
+        axis1_var = a1c1.selectbox(
+            "Axis 1 variable",
+            sweep_variables,
+            index=sweep_variables.index(SweepVariable.LIQUID_MASS_KG_H),
+            format_func=lambda v: var_labels[v],
+            key="phase16_axis1_var",
+        )
+        a1_lo, a1_hi = suggested_sweep_bounds(base_case, axis1_var)
+        axis1_start = a1c2.number_input(
+            f"Axis 1 start ({axis1_var.unit})",
+            value=float(a1_lo),
+            format="%.6g",
+            key=f"phase16_a1_start_{axis1_var.value}",
+        )
+        axis1_stop = a1c3.number_input(
+            f"Axis 1 stop ({axis1_var.unit})",
+            value=float(a1_hi),
+            format="%.6g",
+            key=f"phase16_a1_stop_{axis1_var.value}",
+        )
+        max_1d = 41 if sweep_mode == "1D" else 15
+        axis1_points = a1c4.number_input(
+            "Axis 1 points",
+            min_value=2,
+            max_value=max_1d,
+            value=9 if sweep_mode == "1D" else 7,
+            step=1,
+            key=f"phase16_axis1_points_{sweep_mode}",
+        )
+
+        axis2 = None
+        if sweep_mode == "2D":
+            remaining = [v for v in sweep_variables if v != axis1_var]
+            default2 = SweepVariable.GAS_ACTUAL_M3_H if SweepVariable.GAS_ACTUAL_M3_H in remaining else remaining[0]
+            a2c1, a2c2, a2c3, a2c4 = st.columns(4)
+            axis2_var = a2c1.selectbox(
+                "Axis 2 variable",
+                remaining,
+                index=remaining.index(default2),
+                format_func=lambda v: var_labels[v],
+                key=f"phase16_axis2_var_{axis1_var.value}",
+            )
+            a2_lo, a2_hi = suggested_sweep_bounds(base_case, axis2_var)
+            axis2_start = a2c2.number_input(
+                f"Axis 2 start ({axis2_var.unit})",
+                value=float(a2_lo),
+                format="%.6g",
+                key=f"phase16_a2_start_{axis2_var.value}",
+            )
+            axis2_stop = a2c3.number_input(
+                f"Axis 2 stop ({axis2_var.unit})",
+                value=float(a2_hi),
+                format="%.6g",
+                key=f"phase16_a2_stop_{axis2_var.value}",
+            )
+            axis2_points = a2c4.number_input(
+                "Axis 2 points",
+                min_value=2,
+                max_value=15,
+                value=7,
+                step=1,
+                key="phase16_axis2_points",
+            )
+            requested_points = int(axis1_points) * int(axis2_points)
+            st.caption(f"Requested grid: **{requested_points}** points · Phase 16 limit: {MAX_SWEEP_POINTS}")
+            if requested_points <= MAX_SWEEP_POINTS:
+                axis2 = (axis2_var, axis2_start, axis2_stop, int(axis2_points))
+            else:
+                st.error(f"Reduce point counts: {requested_points} exceeds the {MAX_SWEEP_POINTS}-point Phase 16 limit.")
+        else:
+            requested_points = int(axis1_points)
+            st.caption(f"Requested sweep: **{requested_points}** full integrated simulations")
+
+        run_sweep = st.button(
+            "Run full-physics sweep",
+            type="primary",
+            key="run_phase16_sweep",
+            disabled=requested_points > MAX_SWEEP_POINTS,
+        )
+        if run_sweep:
+            try:
+                axes = [SweepAxis(axis1_var, axis1_start, axis1_stop, int(axis1_points))]
+                if axis2 is not None:
+                    axes.append(SweepAxis(*axis2))
+                with st.spinner(f"Running {requested_points} complete absorber simulations..."):
+                    st.session_state["phase16_sweep"] = run_parameter_sweep(
+                        base_case,
+                        axes,
+                        registry=sweep_base_result.registry,
+                    )
+            except InvalidSweepDefinition as exc:
+                st.error(str(exc))
+            except Exception as exc:
+                st.exception(exc)
+
+        sweep_result = st.session_state.get("phase16_sweep")
+        if sweep_result is not None:
+            # Avoid accidentally presenting a prior sweep as belonging to a newly rerun baseline.
+            if sweep_result.base_case != base_case:
+                st.warning("The stored sweep belongs to an older Simulator baseline. Run the sweep again for the current case.")
+            else:
+                st.divider()
+                q1, q2, q3, q4 = st.columns(4)
+                q1.metric("Total points", sweep_result.total_points)
+                q2.metric("Successful", sweep_result.successful_points)
+                q3.metric("Failed / blocked", sweep_result.failed_points)
+                q4.metric("Sweep ID", "Phase 16")
+
+                sweep_df = pd.DataFrame(sweep_result.records())
+                st.markdown("### Sweep results")
+                st.dataframe(sweep_df, use_container_width=True, hide_index=True)
+
+                successful_df = sweep_df[sweep_df["success"] == True].copy()  # noqa: E712
+                if not successful_df.empty:
+                    focus_solute = st.selectbox(
+                        "Focus solute for component metrics",
+                        list(base_case.solute_ids),
+                        key="phase16_focus_solute",
+                    )
+                    metric_options = {
+                        "Outlet VOC (mg/Nm³)": "outlet_mgVOC_Nm3",
+                        "VOC mass removal (%)": "voc_mass_removal_percent",
+                        "Outlet total (ppmv)": "outlet_ppmv",
+                        "Captured total (kg/h)": "captured_kg_h",
+                        "% Flood": "flooding_percent",
+                        "Wet ΔP (mbar/m)": "wet_pressure_drop_mbar_m",
+                        "Total ΔP (mbar)": "total_pressure_drop_mbar",
+                        f"{focus_solute} absorption factor A": f"{focus_solute}__absorption_factor",
+                        f"{focus_solute} HTU_OG (m)": f"{focus_solute}__HTU_OG_m",
+                        f"{focus_solute} NTU_OG": f"{focus_solute}__NTU_OG",
+                        f"{focus_solute} removal (%)": f"{focus_solute}__removal_percent",
+                    }
+                    metric_label = st.selectbox(
+                        "Output metric",
+                        list(metric_options),
+                        key=f"phase16_output_metric_{focus_solute}",
+                    )
+                    metric_col = metric_options[metric_label]
+
+                    axis1 = sweep_result.axes[0]
+                    if len(sweep_result.axes) == 1:
+                        chart_df = successful_df[[axis1.variable.value, metric_col]].dropna().sort_values(axis1.variable.value)
+                        if not chart_df.empty:
+                            st.markdown("### Sensitivity curve")
+                            st.line_chart(chart_df.set_index(axis1.variable.value)[metric_col])
+                            st.caption(f"x-axis: {axis1.variable.label} [{axis1.variable.unit}] · y-axis: {metric_label}")
+                    else:
+                        axis2_obj = sweep_result.axes[1]
+                        pivot = successful_df.pivot(
+                            index=axis2_obj.variable.value,
+                            columns=axis1.variable.value,
+                            values=metric_col,
+                        )
+                        st.markdown("### 2D response matrix")
+                        st.dataframe(pivot, use_container_width=True)
+                        st.caption(
+                            f"Rows: {axis2_obj.variable.label} [{axis2_obj.variable.unit}] · "
+                            f"Columns: {axis1.variable.label} [{axis1.variable.unit}] · Cell: {metric_label}"
+                        )
+
+                    st.markdown("### Validity across the sweep")
+                    status_counts = sweep_df.groupby(["status", "confidence"], dropna=False).size().reset_index(name="Points")
+                    st.dataframe(status_counts, use_container_width=True, hide_index=True)
+
+                failed_df = sweep_df[sweep_df["success"] == False]  # noqa: E712
+                if not failed_df.empty:
+                    with st.expander("Failed / blocked sweep points", expanded=True):
+                        st.dataframe(failed_df, use_container_width=True, hide_index=True)
+
+                st.download_button(
+                    "Download sweep CSV",
+                    data=sweep_df.to_csv(index=False).encode("utf-8"),
+                    file_name="generic_absorber_phase16_sweep.csv",
+                    mime="text/csv",
+                    key="phase16_download_csv",
+                )
+                st.caption(
+                    "Phase 16 is sensitivity analysis, not optimization. A numerically low outlet is not automatically a valid design; "
+                    "always inspect readiness/confidence, flooding and pressure drop for the same sweep point."
+                )
 
 
 with methods_tab:
@@ -2120,10 +2338,11 @@ with quality_tab:
     st.success("PHASE13_VDC_ACN_GATE = PASS")
     st.success("PHASE14_INTEGRATED_SIMULATOR_GATE = PASS")
     st.success("PHASE15_LIVE_METHODS_GATE = PASS")
-    st.caption("Phase 15 adds a live case-specific engineering audit trail without duplicating or recalculating the physics chain.")
+    st.success("PHASE16_PARAMETER_SWEEP_GATE = PASS")
+    st.caption("Phase 16 adds full-physics 1D/2D sensitivity sweeps; every point reruns the integrated model and keeps applicability/confidence visible.")
 
 st.divider()
 st.caption(
-    "Generic Packed Absorber Simulator V4 · Phase 15 · Integrated Simulator + Live Methods & Assumptions · "
-    "Next: Phase 16 parameter sweep / sensitivity workflows"
+    "Generic Packed Absorber Simulator V4 · Phase 16 · Integrated Simulator + Live Methods + Parameter Sweep · "
+    "Next: Phase 17 comparison tools"
 )

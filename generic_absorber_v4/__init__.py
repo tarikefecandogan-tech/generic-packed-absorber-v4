@@ -1,4 +1,4 @@
-"""Generic Packed Absorber Simulator V4 — Phase 15 integrated simulator with live engineering audit trail."""
+"""Generic Packed Absorber Simulator V4 — Phase 16 integrated simulator with live audit and parameter sweeps."""
 
 from .models import (
     CarrierGasSpec,
@@ -451,4 +451,37 @@ __all__.extend([
     "MethodEquation",
     "PropertyAuditRow",
     "build_live_methods_report",
+])
+
+# Phase 16 — parameter sweep / sensitivity analysis
+from .sweep import (
+    PHASE16_PARAMETER_SWEEP_ID,
+    MAX_SWEEP_POINTS,
+    SweepError,
+    InvalidSweepDefinition,
+    SweepVariable,
+    SweepAxis,
+    ComponentSweepMetrics,
+    SweepPointResult,
+    ParameterSweepResult,
+    base_value_for_variable,
+    suggested_sweep_bounds,
+    apply_sweep_values,
+    run_parameter_sweep,
+)
+
+__all__.extend([
+    "PHASE16_PARAMETER_SWEEP_ID",
+    "MAX_SWEEP_POINTS",
+    "SweepError",
+    "InvalidSweepDefinition",
+    "SweepVariable",
+    "SweepAxis",
+    "ComponentSweepMetrics",
+    "SweepPointResult",
+    "ParameterSweepResult",
+    "base_value_for_variable",
+    "suggested_sweep_bounds",
+    "apply_sweep_values",
+    "run_parameter_sweep",
 ])

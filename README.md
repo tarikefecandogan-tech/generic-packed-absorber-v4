@@ -1,3 +1,15 @@
+# Generic Packed Absorber Simulator V4 — Phase 16
+
+Phase 16 adds full-physics 1D/2D parameter sweeps to the integrated simulator. Every sweep point reruns property resolution, Onda/two-film transfer, counter-current ODEs, units/report reconstruction, hydraulics, and applicability; there is no separate shortcut sweep model.
+
+**Current gates:** Phase 1–16 PASS · **136/136 tests PASS** · **82/82 locked V3 parity metrics PASS**.
+
+New product tab: **Parameter Sweep**. Supported axes are temperature, pressure, actual gas flow, liquid flow, diameter, packed height, and feed concentration scale. Results include outlet/removal, captured mass, flooding, pressure drop, and per-solute A/HTU/NTU.
+
+Phase 16 is sensitivity analysis rather than optimization; validity/confidence and hydraulic feasibility remain visible for every point. See `PHASE16_STATUS.md`.
+
+---
+
 # Generic Packed Absorber Simulator V4 — Phase 14
 
 Phase 14 is the first integrated product-facing release of the V4 development track. It connects the verified data, resolver, Onda/two-film, counter-current ODE, units, hydraulics and applicability layers through a single generic simulation workflow.

@@ -55,3 +55,21 @@ Upload the complete Phase 15 package over the existing repository. In particular
 - `PHASE15_STATUS.md`
 
 After deploy, run a case under **Simulator**, then open **Methods & Assumptions**. The audit should update to that exact case. If Streamlit Cloud keeps an old module cached, use **Manage app → Reboot app**.
+
+
+## Phase 16 update
+
+Upload the complete Phase 16 package over the existing repository so the UI and package exports remain version-aligned. Important files include:
+
+- `app.py`
+- `generic_absorber_v4/__init__.py`
+- `generic_absorber_v4/sweep.py`
+- `tests/test_phase16_parameter_sweep.py`
+- `phase16_check.py`
+- `PHASE16_STATUS.md`
+
+Recommended commit message:
+
+`Phase 16 - full physics parameter sweep`
+
+After deployment, run a baseline under **Simulator**, open **Parameter Sweep**, and confirm the sidebar shows `PHASE16_PARAMETER_SWEEP_GATE = PASS`. If Streamlit Cloud retains an old module, use **Manage app → Reboot app**.
