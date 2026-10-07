@@ -1,3 +1,22 @@
+# Generic Packed Absorber Simulator V4 — Phase 18A
+
+Phase 18A introduces the persistent SQLite engineering database schema and migration architecture while keeping the verified Phase 17 Python registry as the production solver data source.
+
+**Current gates:** Phase 1–18A PASS · **151/151 tests PASS** · **82/82 locked V3 parity metrics PASS**.
+
+New database assets:
+
+- `database/absorber_database.db`
+- `database/schema.sql`
+- `generic_absorber_v4/database.py`
+- `generic_absorber_v4/database_migration.py`
+
+The migration gate proves exact Registry -> SQLite -> Registry round-trip parity and reproduces the reference absorber result using the SQLite-reconstructed registry. No production cut-over occurs in this phase.
+
+See `PHASE18A_STATUS.md` for schema, inventory, parity and data-governance details.
+
+---
+
 # Generic Packed Absorber Simulator V4 — Phase 17
 
 Phase 17 adds full-physics engineering comparison tools to the integrated simulator. Packing and solvent alternatives are evaluated by rerunning the complete verified calculation chain; there is no hidden composite "best" score.

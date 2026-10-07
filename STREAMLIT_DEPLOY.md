@@ -95,3 +95,28 @@ Recommended commit message:
 After deployment, run a baseline under **Simulator**, open **Comparison**, and confirm the sidebar shows `PHASE17_COMPARISON_GATE = PASS`. If Streamlit Community Cloud retains an old module, use **Manage app → Reboot app**.
 
 Phase 17 completes the originally planned product roadmap through comparison tools.
+
+
+## Phase 18A update
+
+Upload the **complete Phase 18A package** over the existing repository. The SQLite file must be committed with the code; do not upload only the new Python modules.
+
+Important aligned files:
+
+- `app.py`
+- `generic_absorber_v4/__init__.py`
+- `generic_absorber_v4/database.py`
+- `generic_absorber_v4/database_migration.py`
+- `database/absorber_database.db`
+- `database/schema.sql`
+- `tests/test_phase18a_database_migration.py`
+- `phase18a_check.py`
+- `PHASE18A_STATUS.md`
+
+Recommended commit message:
+
+`Phase 18A - SQLite database schema and migration parity`
+
+After deployment, confirm the sidebar shows `PHASE18A_DATABASE_MIGRATION_GATE = PASS` and open **Database Migration**. The page should report schema version `18A.1`, SQLite integrity `OK`, zero foreign-key violations, and the migrated engineering-record counts. Use the parity button to verify exact round-trip equality.
+
+Phase 18A deliberately leaves the production simulator on the verified Python registry. SQLite cut-over belongs to the later repository-abstraction/parity phase.

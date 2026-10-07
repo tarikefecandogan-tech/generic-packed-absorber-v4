@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pandas as pd
 import streamlit as st
 
@@ -93,6 +95,14 @@ from generic_absorber_v4 import (
     ComparisonMode,
     compare_packings,
     compare_solvents,
+)
+
+from generic_absorber_v4 import (
+    PHASE18A_DATABASE_ID,
+    PHASE18A_SCHEMA_VERSION,
+    SQLiteAbsorberRepository,
+    build_phase18a_source_registry,
+    compare_registry_to_sqlite,
 )
 
 st.set_page_config(
@@ -266,12 +276,11 @@ SIM_REGISTRY = build_phase14_registry()
 SIM_RESOLVER = PropertyResolver(SIM_REGISTRY)
 
 st.title("🧪 Generic Packed Absorber Simulator V4")
-st.caption("Phase 17 — Integrated Simulator + Live Methods + Sweep + Comparison Tools")
+st.caption("Phase 18A — SQLite Database Schema & Migration Architecture")
 
 st.info(
-    "Phase 17 adds engineering comparison tools on top of the integrated simulator, live audit and full-physics sweeps. "
-    "Packing and solvent alternatives are evaluated by rerunning the same complete calculation chain. No hidden composite "
-    "'best' score is used; performance, hydraulics, readiness and confidence remain visible side by side."
+    "Phase 18A adds a persistent SQLite engineering database schema and migration/parity layer without changing the active physics source. "
+    "The Phase 17 Python registry remains the solver default while SQLite round-trip equivalence is verified before any production cut-over."
 )
 
 with st.sidebar:
@@ -293,6 +302,7 @@ with st.sidebar:
     st.success("PHASE15_LIVE_METHODS_GATE = PASS")
     st.success("PHASE16_PARAMETER_SWEEP_GATE = PASS")
     st.success("PHASE17_COMPARISON_GATE = PASS")
+    st.success("PHASE18A_DATABASE_MIGRATION_GATE = PASS")
     st.metric("Reference ID", REGISTRY.reference_id)
     st.divider()
     st.caption("Resolution precedence")
@@ -307,6 +317,7 @@ with st.sidebar:
     methods_tab,
     sweep_tab,
     comparison_tab,
+    database_tab,
     overview_tab,
     resolver_tab,
     mass_transfer_tab,
@@ -330,6 +341,7 @@ with st.sidebar:
     "Methods & Assumptions",
     "Parameter Sweep",
     "Comparison",
+    "Database Migration",
     "Overview",
     "Property Resolver",
     "Mass Transfer",
@@ -1107,6 +1119,66 @@ with comparison_tab:
                     "Decision rule: do not select an alternative from removal alone. Review outlet/removal together with ΔP, %Flood, "
                     "readiness, confidence and property provenance. Phase 17 intentionally provides no automatic 'best solvent' or 'best packing' score."
                 )
+
+
+with database_tab:
+    st.subheader("Phase 18A — SQLite Database Migration")
+    st.caption(
+        "This is the migration/audit view, not yet the final Database Explorer. "
+        "The solver still defaults to the verified Python registry; this page proves the SQLite snapshot can reconstruct it exactly."
+    )
+
+    db_path = Path(__file__).resolve().parent / "database" / "absorber_database.db"
+    if not db_path.exists():
+        st.error(f"Prebuilt SQLite database not found: {db_path}")
+    else:
+        db_repo = SQLiteAbsorberRepository(db_path)
+        db_meta = db_repo.metadata()
+        db_inv = db_repo.inventory()
+        d1, d2, d3, d4 = st.columns(4)
+        d1.metric("Schema version", db_meta.get("schema_version", "—"))
+        d2.metric("Engineering records", db_inv.engineering_records)
+        d3.metric("Sources", db_inv.sources)
+        d4.metric("Provenance records", db_inv.provenance_records)
+
+        st.markdown("### Inventory")
+        st.dataframe(pd.DataFrame([
+            {"Table": "Solutes", "Records": db_inv.solutes},
+            {"Table": "Carrier gases", "Records": db_inv.carriers},
+            {"Table": "Solvents", "Records": db_inv.solvents},
+            {"Table": "Packings", "Records": db_inv.packings},
+            {"Table": "Gas transport pairs", "Records": db_inv.gas_transport_pairs},
+            {"Table": "Liquid transport pairs", "Records": db_inv.liquid_transport_pairs},
+            {"Table": "Equilibrium pairs", "Records": db_inv.equilibrium_pairs},
+        ]), use_container_width=True, hide_index=True)
+
+        st.markdown("### Database health")
+        h1, h2 = st.columns(2)
+        h1.metric("SQLite integrity", db_repo.integrity_check().upper())
+        h2.metric("Foreign-key violations", len(db_repo.foreign_key_violations()))
+        st.caption(f"Database ID: {db_meta.get('database_id', PHASE18A_DATABASE_ID)}")
+        st.caption(f"Data snapshot: {db_meta.get('data_snapshot_id', '—')}")
+
+        if st.button("Run registry ↔ SQLite parity gate", key="phase18a_parity_button"):
+            parity18 = compare_registry_to_sqlite(build_phase18a_source_registry(), db_repo)
+            if parity18.pass_gate:
+                st.success("PHASE18A_DATABASE_MIGRATION_GATE = PASS")
+            else:
+                st.error("PHASE18A_DATABASE_MIGRATION_GATE = FAIL")
+            st.dataframe(pd.DataFrame([
+                {"Dataset": key, "Exact dataclass parity": "PASS" if value else "FAIL"}
+                for key, value in parity18.dictionary_parity.items()
+            ]), use_container_width=True, hide_index=True)
+
+        with st.expander("Registered equilibrium pairs", expanded=False):
+            st.dataframe(pd.DataFrame(db_repo.list_equilibrium_pairs()), use_container_width=True, hide_index=True)
+        with st.expander("Normalized sources", expanded=False):
+            st.dataframe(pd.DataFrame(db_repo.list_sources()), use_container_width=True, hide_index=True)
+
+        st.info(
+            "Phase 18A intentionally does not switch the production solver to SQLite yet. "
+            "Cut-over comes only after repository abstraction and full old-registry == database regression gates."
+        )
 
 
 with methods_tab:
@@ -2520,10 +2592,11 @@ with quality_tab:
     st.success("PHASE15_LIVE_METHODS_GATE = PASS")
     st.success("PHASE16_PARAMETER_SWEEP_GATE = PASS")
     st.success("PHASE17_COMPARISON_GATE = PASS")
+    st.success("PHASE18A_DATABASE_MIGRATION_GATE = PASS")
     st.caption("Phase 17 adds full-physics packing/solvent comparison tools. Alternatives keep performance, hydraulics, applicability and confidence visible without a hidden composite score.")
 
 st.divider()
 st.caption(
-    "Generic Packed Absorber Simulator V4 · Phase 17 · Integrated Simulator + Live Methods + Sweep + Comparison · "
+    "Generic Packed Absorber Simulator V4 · Phase 18A · SQLite Schema + Migration Architecture · "
     "Milestone C complete: integrated UI + live audit + sweeps + comparison tools"
 )

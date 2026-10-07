@@ -506,3 +506,34 @@ from .comparison import (
     compare_packings,
     compare_solvents,
 )
+
+# Phase 18A — SQLite engineering database schema and migration architecture
+from .database import (
+    PHASE18A_SCHEMA_VERSION,
+    PHASE18A_DATABASE_ID,
+    DatabaseInventory,
+    SQLiteAbsorberRepository,
+)
+from .database_migration import (
+    PHASE18A_MIGRATION_ID,
+    MigrationParityReport,
+    create_empty_database,
+    migrate_registry_to_sqlite,
+    build_phase18a_source_registry,
+    build_phase18a_database,
+    compare_registry_to_sqlite,
+)
+
+__all__.extend([
+    "PHASE18A_SCHEMA_VERSION",
+    "PHASE18A_DATABASE_ID",
+    "DatabaseInventory",
+    "SQLiteAbsorberRepository",
+    "PHASE18A_MIGRATION_ID",
+    "MigrationParityReport",
+    "create_empty_database",
+    "migrate_registry_to_sqlite",
+    "build_phase18a_source_registry",
+    "build_phase18a_database",
+    "compare_registry_to_sqlite",
+])
