@@ -1,0 +1,57 @@
+{
+  "contract_version": "18F.1",
+  "package_id": "REPLACE_WITH_UNIQUE_PACKAGE_ID",
+  "description": "One auditable chemical-data expansion package.",
+  "sources": [
+    {
+      "source_key": "SRC_IDENTITY",
+      "citation": "Full literature/database citation",
+      "source_type": "primary_literature_or_curated_database",
+      "title": "Source title",
+      "authors": "Authors",
+      "publication_year": null,
+      "journal_or_publisher": null,
+      "url": "https://...",
+      "doi": null,
+      "accessed_on": "YYYY-MM-DD",
+      "evidence_role": "PRIMARY_OR_CURATED",
+      "quality_note": "Why this source is appropriate.",
+      "notes": ""
+    }
+  ],
+  "provenance": [
+    {
+      "provenance_key": "PROV_IDENTITY",
+      "source_key": "SRC_IDENTITY",
+      "method": "reported / compiled / correlation / screening surrogate",
+      "confidence": "B",
+      "resolution_tier": "DATABASE",
+      "reference_temperature_K": null,
+      "reference_pressure_Pa": null,
+      "validity_temperature_min_K": null,
+      "validity_temperature_max_K": null,
+      "validity_pressure_min_Pa": null,
+      "validity_pressure_max_Pa": null,
+      "composition_validity_note": "",
+      "validity_note": ""
+    }
+  ],
+  "solutes": [
+    {
+      "solute_id": "new_solute",
+      "name": "Chemical name",
+      "MW_kg_mol": null,
+      "carbon_atoms": null,
+      "formula": null,
+      "cas_number": null,
+      "fuller_diffusion_volume": null,
+      "boiling_molar_volume_cm3_mol": null,
+      "provenance_key": "PROV_IDENTITY"
+    }
+  ],
+  "carriers": [],
+  "solvents": [],
+  "gas_transport_pairs": [],
+  "liquid_transport_pairs": [],
+  "equilibrium_pairs": []
+}
