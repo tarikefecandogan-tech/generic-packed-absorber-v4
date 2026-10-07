@@ -89,6 +89,10 @@ from generic_absorber_v4 import (
     InvalidSweepDefinition,
     run_parameter_sweep,
     suggested_sweep_bounds,
+    PHASE17_COMPARISON_ID,
+    ComparisonMode,
+    compare_packings,
+    compare_solvents,
 )
 
 st.set_page_config(
@@ -262,12 +266,12 @@ SIM_REGISTRY = build_phase14_registry()
 SIM_RESOLVER = PropertyResolver(SIM_REGISTRY)
 
 st.title("🧪 Generic Packed Absorber Simulator V4")
-st.caption("Phase 16 — Integrated Simulator + Live Methods + Parameter Sweep")
+st.caption("Phase 17 — Integrated Simulator + Live Methods + Sweep + Comparison Tools")
 
 st.info(
-    "Phase 16 keeps the integrated simulator and live engineering audit trail, and adds full-physics parameter sweeps. "
-    "Every sweep point reruns property resolution, Onda/two-film transfer, counter-current ODEs, hydraulics, unit reconstruction "
-    "and applicability. Sweep logic does not contain a simplified absorber equation."
+    "Phase 17 adds engineering comparison tools on top of the integrated simulator, live audit and full-physics sweeps. "
+    "Packing and solvent alternatives are evaluated by rerunning the same complete calculation chain. No hidden composite "
+    "'best' score is used; performance, hydraulics, readiness and confidence remain visible side by side."
 )
 
 with st.sidebar:
@@ -288,6 +292,7 @@ with st.sidebar:
     st.success("PHASE14_INTEGRATED_SIMULATOR_GATE = PASS")
     st.success("PHASE15_LIVE_METHODS_GATE = PASS")
     st.success("PHASE16_PARAMETER_SWEEP_GATE = PASS")
+    st.success("PHASE17_COMPARISON_GATE = PASS")
     st.metric("Reference ID", REGISTRY.reference_id)
     st.divider()
     st.caption("Resolution precedence")
@@ -301,6 +306,7 @@ with st.sidebar:
     simulator_tab,
     methods_tab,
     sweep_tab,
+    comparison_tab,
     overview_tab,
     resolver_tab,
     mass_transfer_tab,
@@ -323,6 +329,7 @@ with st.sidebar:
     "Simulator",
     "Methods & Assumptions",
     "Parameter Sweep",
+    "Comparison",
     "Overview",
     "Property Resolver",
     "Mass Transfer",
@@ -926,6 +933,179 @@ with sweep_tab:
                 st.caption(
                     "Phase 16 is sensitivity analysis, not optimization. A numerically low outlet is not automatically a valid design; "
                     "always inspect readiness/confidence, flooding and pressure drop for the same sweep point."
+                )
+
+
+with comparison_tab:
+    st.subheader("Engineering Comparison Tools")
+    st.caption(
+        "Compare alternatives on a controlled basis. Each successful alternative reruns the full integrated V4 solver: "
+        "properties → Onda/two-film → counter-current ODEs → hydraulics → units → applicability. "
+        "Phase 17 deliberately does not calculate a hidden composite best-score."
+    )
+
+    comparison_base_result = st.session_state.get("phase14_result")
+    if comparison_base_result is None:
+        st.info("Run a case in the Simulator tab first. That case becomes the comparison basis.")
+    else:
+        base_case = comparison_base_result.case
+        st.success(
+            f"Comparison basis loaded · {', '.join(base_case.solute_ids)} / "
+            f"{comparison_base_result.registry.get_solvent(base_case.solvent_id).name} / "
+            f"{comparison_base_result.registry.get_packing(base_case.packing_id).name}"
+        )
+        st.caption(
+            "For packing comparison, chemistry, feed, geometry and flow basis are fixed and only packing changes. "
+            "For solvent comparison, solutes/feed/carrier/packing/geometry/flows are fixed and only the solvent changes. "
+            "Unsupported chemistry is retained as a failed alternative instead of being silently omitted."
+        )
+
+        comparison_mode_label = st.radio(
+            "Comparison mode",
+            ["Packing alternatives", "Solvent alternatives"],
+            horizontal=True,
+            key="phase17_comparison_mode",
+        )
+
+        if comparison_mode_label == "Packing alternatives":
+            packing_ids = list(comparison_base_result.registry.packings)
+            default_packings = [pid for pid in (base_case.packing_id, "38mm_metal_pall_ring", "imtp_25") if pid in packing_ids]
+            selected_alternatives = st.multiselect(
+                "Packings to compare",
+                packing_ids,
+                default=default_packings,
+                format_func=lambda pid: comparison_base_result.registry.get_packing(pid).name,
+                key="phase17_packings",
+            )
+            with st.expander("Packing data provenance / screening status"):
+                packing_rows = []
+                for pid in selected_alternatives:
+                    p = comparison_base_result.registry.get_packing(pid)
+                    prov = p.provenance
+                    packing_rows.append({
+                        "Packing": p.name,
+                        "a (m²/m³)": p.area_m2_m3,
+                        "Nominal size (mm)": 1000.0 * p.nominal_size_m,
+                        "Void fraction": p.void_fraction,
+                        "Fp (ft⁻¹)": p.packing_factor_ft_inv,
+                        "Fp basis": p.packing_factor_basis,
+                        "Confidence": "—" if prov is None else prov.confidence.value,
+                        "Source": "—" if prov is None else prov.source,
+                    })
+                if packing_rows:
+                    st.dataframe(pd.DataFrame(packing_rows), use_container_width=True, hide_index=True)
+            run_comparison = st.button(
+                "Run packing comparison", type="primary", key="run_phase17_packing_comparison",
+                disabled=not selected_alternatives,
+            )
+            if run_comparison:
+                with st.spinner(f"Running {len(selected_alternatives)} complete absorber simulations..."):
+                    st.session_state["phase17_comparison"] = compare_packings(
+                        base_case, selected_alternatives, registry=comparison_base_result.registry
+                    )
+        else:
+            solvent_ids = list(comparison_base_result.registry.solvents)
+            default_solvents = list(solvent_ids) if len(solvent_ids) <= 4 else [base_case.solvent_id]
+            selected_alternatives = st.multiselect(
+                "Solvents to compare",
+                solvent_ids,
+                default=default_solvents,
+                format_func=lambda sid: comparison_base_result.registry.get_solvent(sid).name,
+                key="phase17_solvents",
+            )
+            st.caption(
+                "Acrylonitrile is automatically flagged as a materially volatile solvent in this comparison because V4.0 "
+                "does not yet model solvent evaporation. That limitation remains visible in readiness/confidence."
+            )
+            run_comparison = st.button(
+                "Run solvent comparison", type="primary", key="run_phase17_solvent_comparison",
+                disabled=not selected_alternatives,
+            )
+            if run_comparison:
+                evap_flags = {sid: (sid == "acrylonitrile") for sid in selected_alternatives}
+                with st.spinner(f"Running {len(selected_alternatives)} complete absorber simulations..."):
+                    st.session_state["phase17_comparison"] = compare_solvents(
+                        base_case,
+                        selected_alternatives,
+                        registry=comparison_base_result.registry,
+                        solvent_evaporation_expected=evap_flags,
+                    )
+
+        comparison_result = st.session_state.get("phase17_comparison")
+        if comparison_result is not None:
+            # Prevent an old comparison from being presented as belonging to a new baseline.
+            if comparison_result.base_case is not None and comparison_result.base_case != base_case:
+                st.warning("The stored comparison belongs to an older Simulator baseline. Run the comparison again for the current case.")
+            else:
+                st.divider()
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Alternatives", len(comparison_result.alternatives))
+                c2.metric("Successful", comparison_result.successful_alternatives)
+                c3.metric("Failed / blocked", comparison_result.failed_alternatives)
+
+                comp_df = pd.DataFrame(comparison_result.records())
+                st.markdown("### Comparison table")
+                st.dataframe(comp_df, use_container_width=True, hide_index=True)
+
+                success_df = comp_df[comp_df["success"] == True].copy()  # noqa: E712
+                if not success_df.empty:
+                    metric_options = {
+                        "Outlet VOC (mg/Nm³)": "outlet_mgVOC_Nm3",
+                        "VOC mass removal (%)": "voc_mass_removal_percent",
+                        "Captured total (kg/h)": "captured_kg_h",
+                        "% Flood": "flooding_percent",
+                        "Wet ΔP (mbar/m)": "wet_pressure_drop_mbar_m",
+                        "Total ΔP (mbar)": "total_pressure_drop_mbar",
+                    }
+                    focus_solute = st.selectbox(
+                        "Component detail",
+                        list(base_case.solute_ids),
+                        key="phase17_focus_solute",
+                    )
+                    metric_options.update({
+                        f"{focus_solute} removal (%)": f"{focus_solute}__removal_percent",
+                        f"{focus_solute} absorption factor A": f"{focus_solute}__absorption_factor",
+                        f"{focus_solute} HTU_OG (m)": f"{focus_solute}__HTU_OG_m",
+                        f"{focus_solute} NTU_OG": f"{focus_solute}__NTU_OG",
+                    })
+                    metric_label = st.selectbox(
+                        "Comparison metric", list(metric_options), key="phase17_metric"
+                    )
+                    metric_col = metric_options[metric_label]
+                    chart = success_df[["label", metric_col]].dropna().set_index("label")
+                    if not chart.empty:
+                        st.bar_chart(chart)
+                        st.caption(
+                            f"Chart metric: {metric_label}. This is a visualization/sort dimension only; it is not a composite design score."
+                        )
+
+                    st.markdown("### Readiness and confidence")
+                    st.dataframe(
+                        success_df[[
+                            "label", "status", "confidence", "voc_mass_removal_percent",
+                            "flooding_percent", "wet_pressure_drop_mbar_m"
+                        ]],
+                        use_container_width=True, hide_index=True,
+                    )
+
+                failed_df = comp_df[comp_df["success"] == False]  # noqa: E712
+                if not failed_df.empty:
+                    with st.expander("Unsupported / failed alternatives", expanded=True):
+                        st.dataframe(
+                            failed_df[["label", "solvent_id", "packing_id", "error"]],
+                            use_container_width=True, hide_index=True,
+                        )
+
+                st.download_button(
+                    "Download comparison CSV",
+                    data=comp_df.to_csv(index=False).encode("utf-8"),
+                    file_name="generic_absorber_phase17_comparison.csv",
+                    mime="text/csv",
+                    key="phase17_download_csv",
+                )
+                st.info(
+                    "Decision rule: do not select an alternative from removal alone. Review outlet/removal together with ΔP, %Flood, "
+                    "readiness, confidence and property provenance. Phase 17 intentionally provides no automatic 'best solvent' or 'best packing' score."
                 )
 
 
@@ -2339,10 +2519,11 @@ with quality_tab:
     st.success("PHASE14_INTEGRATED_SIMULATOR_GATE = PASS")
     st.success("PHASE15_LIVE_METHODS_GATE = PASS")
     st.success("PHASE16_PARAMETER_SWEEP_GATE = PASS")
-    st.caption("Phase 16 adds full-physics 1D/2D sensitivity sweeps; every point reruns the integrated model and keeps applicability/confidence visible.")
+    st.success("PHASE17_COMPARISON_GATE = PASS")
+    st.caption("Phase 17 adds full-physics packing/solvent comparison tools. Alternatives keep performance, hydraulics, applicability and confidence visible without a hidden composite score.")
 
 st.divider()
 st.caption(
-    "Generic Packed Absorber Simulator V4 · Phase 16 · Integrated Simulator + Live Methods + Parameter Sweep · "
-    "Next: Phase 17 comparison tools"
+    "Generic Packed Absorber Simulator V4 · Phase 17 · Integrated Simulator + Live Methods + Sweep + Comparison · "
+    "Milestone C complete: integrated UI + live audit + sweeps + comparison tools"
 )

@@ -1,4 +1,4 @@
-"""Generic Packed Absorber Simulator V4 — Phase 16 integrated simulator with live audit and parameter sweeps."""
+"""Generic Packed Absorber Simulator V4 — Phase 17 engineering comparison tools."""
 
 from .models import (
     CarrierGasSpec,
@@ -485,3 +485,24 @@ __all__.extend([
     "apply_sweep_values",
     "run_parameter_sweep",
 ])
+
+from .packing_catalog import (
+    COMPARISON_PACKINGS,
+    LEGACY_PACKING_PROVENANCE,
+    PHASE17_PACKING_CATALOG_ID,
+    register_phase17_comparison_packings,
+)
+from .comparison import (
+    ComparisonAlternativeResult,
+    ComparisonError,
+    ComparisonMode,
+    ComponentComparisonMetrics,
+    EngineeringComparisonResult,
+    InvalidComparisonDefinition,
+    MAX_COMPARISON_ALTERNATIVES,
+    NamedCase,
+    PHASE17_COMPARISON_ID,
+    compare_named_cases,
+    compare_packings,
+    compare_solvents,
+)

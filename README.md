@@ -1,3 +1,15 @@
+# Generic Packed Absorber Simulator V4 — Phase 17
+
+Phase 17 adds full-physics engineering comparison tools to the integrated simulator. Packing and solvent alternatives are evaluated by rerunning the complete verified calculation chain; there is no hidden composite "best" score.
+
+**Current gates:** Phase 1–17 PASS · **144/144 tests PASS** · **82/82 locked V3 parity metrics PASS**.
+
+New product tab: **Comparison**. The Phase 17 registry also exposes the remaining legacy V3 random-packing records for screening comparison while preserving the locked 25 mm reference fixture unchanged.
+
+See `PHASE17_STATUS.md` for the comparison rules, packing catalog provenance, example results and engineering interpretation.
+
+---
+
 # Generic Packed Absorber Simulator V4 — Phase 16
 
 Phase 16 adds full-physics 1D/2D parameter sweeps to the integrated simulator. Every sweep point reruns property resolution, Onda/two-film transfer, counter-current ODEs, units/report reconstruction, hydraulics, and applicability; there is no separate shortcut sweep model.

@@ -73,3 +73,25 @@ Recommended commit message:
 `Phase 16 - full physics parameter sweep`
 
 After deployment, run a baseline under **Simulator**, open **Parameter Sweep**, and confirm the sidebar shows `PHASE16_PARAMETER_SWEEP_GATE = PASS`. If Streamlit Cloud retains an old module, use **Manage app → Reboot app**.
+
+
+## Phase 17 update
+
+Upload the **complete Phase 17 package** over the existing repository so the new comparison engine, packing catalog, UI imports and tests remain version-aligned. Important files include:
+
+- `app.py`
+- `generic_absorber_v4/__init__.py`
+- `generic_absorber_v4/comparison.py`
+- `generic_absorber_v4/packing_catalog.py`
+- `generic_absorber_v4/simulation.py`
+- `tests/test_phase17_comparison_tools.py`
+- `phase17_check.py`
+- `PHASE17_STATUS.md`
+
+Recommended commit message:
+
+`Phase 17 - engineering comparison tools`
+
+After deployment, run a baseline under **Simulator**, open **Comparison**, and confirm the sidebar shows `PHASE17_COMPARISON_GATE = PASS`. If Streamlit Community Cloud retains an old module, use **Manage app → Reboot app**.
+
+Phase 17 completes the originally planned product roadmap through comparison tools.

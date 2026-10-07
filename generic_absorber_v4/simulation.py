@@ -43,6 +43,7 @@ from .registry import AbsorberDataRegistry
 from .resolver import PropertyResolver, ResolvedComponentProperties
 from .units import GasStreamBalance, GasStreamReport, gas_stream_balance, report_gas_stream
 from .vdc_acn import build_vdc_acn_registry
+from .packing_catalog import register_phase17_comparison_packings
 
 PHASE14_INTEGRATED_SIMULATOR_ID = "PHASE14_INTEGRATED_GENERIC_SIMULATOR_2026_10_07"
 
@@ -125,6 +126,7 @@ class GenericAbsorberSimulationResult:
 def build_phase14_registry() -> AbsorberDataRegistry:
     """Return the combined registered chemistry catalog available at Phase 14."""
     registry = build_vdc_acn_registry()
+    register_phase17_comparison_packings(registry)
     registry.reference_id = PHASE14_INTEGRATED_SIMULATOR_ID
     return registry
 
