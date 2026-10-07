@@ -55,6 +55,23 @@ from generic_absorber_v4 import (
     WILKE_CHANG_SOURCE,
     build_vdc_water_registry,
     run_vdc_water_case,
+    PHASE13_VDC_ACN_CASE_ID,
+    ACN_SOLVENT_ID,
+    ACN_CAS,
+    ACN_FORMULA,
+    ACN_DENSITY_22C_KG_M3,
+    ACN_VISCOSITY_NEAR_AMBIENT_PA_S,
+    ACN_SURFACE_TENSION_NEAR_AMBIENT_N_M,
+    VDC_ACN_LINEAR_M_22C,
+    ACN_VAPOR_FRACTION_IF_SATURATED_22C,
+    ACN_BULK_SOURCE,
+    VDC_VP_SOURCE,
+    ACN_VP_SOURCE,
+    VDC_ACN_EQUILIBRIUM_SOURCE,
+    WILKE_CHANG_ACN_NOTE,
+    PROJECT_PILOT_NOTE,
+    build_vdc_acn_registry,
+    run_vdc_acn_case,
 )
 
 st.set_page_config(
@@ -228,9 +245,9 @@ st.title("🧪 Generic Packed Absorber Simulator V4")
 st.caption("Phase 12 — VDC / Water Real-Chemistry Extension")
 
 st.warning(
-    "Phase 12 adds the first real chemistry outside the locked ACN/VAc reference: VDC / Water. "
-    "VDC-water equilibrium uses a traceable NIST/Gossett dataset (Confidence B), while missing VDC transport "
-    "pairs intentionally resolve through Fuller and Wilke–Chang as visible Confidence C estimates."
+    "Phase 13 adds VDC / Acrylonitrile as a real-solvent screening case. AN bulk properties are literature-backed, "
+    "but VDC/AN equilibrium currently uses an explicit Confidence D ideal-dilute Raoult surrogate because a direct "
+    "binary VLE dataset has not yet been registered. AN solvent evaporation is also outside the V4.0 model."
 )
 
 with st.sidebar:
@@ -247,6 +264,7 @@ with st.sidebar:
     st.success("PHASE10_SYNTHETIC_GENERIC_GATE = PASS")
     st.success("PHASE11_PROPERTY_ESTIMATION_GATE = PASS")
     st.success("PHASE12_VDC_WATER_GATE = PASS")
+    st.success("PHASE13_VDC_ACN_GATE = PASS")
     st.metric("Reference ID", REGISTRY.reference_id)
     st.divider()
     st.caption("Resolution precedence")
@@ -268,6 +286,7 @@ with st.sidebar:
     synthetic_tab,
     estimation_tab,
     vdc_tab,
+    vdc_acn_tab,
     lookup_tab,
     solute_tab,
     fluid_tab,
@@ -286,6 +305,7 @@ with st.sidebar:
     "Synthetic Generic Test",
     "Property Estimates",
     "VDC / Water",
+    "VDC / Acrylonitrile",
     "Registry Lookup",
     "Solutes",
     "Carrier & Solvent",
@@ -295,7 +315,7 @@ with st.sidebar:
 ])
 
 with overview_tab:
-    st.subheader("Phase 12 architecture")
+    st.subheader("Phase 13 architecture")
     st.code(
         """Phase 1 immutable data objects
         ↓
@@ -1361,6 +1381,105 @@ with vdc_tab:
     st.warning(
         "Phase 12 does not calibrate the model to plant trials. DG and DL remain Confidence C estimates, and the published "
         "Henry literature scatter is retained as an explicit uncertainty rather than hidden by tuning."
+    )
+
+
+with vdc_acn_tab:
+    st.subheader("Phase 13 — VDC / Acrylonitrile screening gate")
+    st.caption(
+        "This case adds a real liquid acrylonitrile solvent, but the VDC/AN binary equilibrium is not yet design-grade. "
+        "The registered m-value is an explicit ideal-dilute Raoult screening surrogate at 22 °C and 1 atm."
+    )
+
+    st.markdown("### Acrylonitrile solvent property set")
+    st.dataframe(pd.DataFrame([{
+        "Solvent ID": ACN_SOLVENT_ID,
+        "CAS": ACN_CAS,
+        "Formula": ACN_FORMULA,
+        "Density @22°C (kg/m³)": ACN_DENSITY_22C_KG_M3,
+        "Viscosity near ambient (mPa·s)": ACN_VISCOSITY_NEAR_AMBIENT_PA_S * 1e3,
+        "Surface tension near ambient (mN/m)": ACN_SURFACE_TENSION_NEAR_AMBIENT_N_M * 1e3,
+        "VDC/AN screening m @22°C": VDC_ACN_LINEAR_M_22C,
+        "AN Psat/P @22°C": ACN_VAPOR_FRACTION_IF_SATURATED_22C,
+    }]), use_container_width=True, hide_index=True)
+
+    st.warning(
+        "Thermodynamics warning: the VDC/AN equilibrium uses gamma∞=1.0 and pure VDC vapor pressure to form "
+        "m = Psat/P. It is Confidence D screening data, not measured binary VLE."
+    )
+    st.warning(
+        "Volatility warning: pure acrylonitrile vapor pressure at the fixture temperature is about 12.7% of 1 atm. "
+        "V4.0 does not include solvent evaporation, so the result is outside the recommended model domain."
+    )
+
+    if st.button("Run Phase 13 VDC / Acrylonitrile gate", type="primary", key="run_phase13_vdc_acn"):
+        report = run_vdc_acn_case()
+        if report.pass_gate:
+            st.success("PHASE13_VDC_ACN_GATE = PASS")
+        else:
+            st.error("PHASE13_VDC_ACN_GATE = FAIL")
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Case", PHASE13_VDC_ACN_CASE_ID)
+        c2.metric("Pre-check", report.pre_applicability.status.value)
+        c3.metric("Final status", report.post_applicability.status.value)
+        c4.metric("Overall confidence", report.post_applicability.confidence.overall.value)
+
+        st.markdown("### Resolved property path")
+        st.dataframe(pd.DataFrame([
+            resolved_row("VDC DG", report.resolved.gas_diffusivity),
+            resolved_row("VDC in AN DL", report.resolved.liquid_diffusivity),
+            resolved_row("VDC/AN equilibrium m", report.resolved.equilibrium.active_property),
+        ]), use_container_width=True, hide_index=True)
+
+        st.markdown("### Same-column screening comparison: Water vs Acrylonitrile")
+        st.dataframe(pd.DataFrame([
+            {
+                "Solvent": "Water (Phase 12)",
+                "Absorption factor A": report.water_absorption_factor,
+                "Removal (%)": 100 * report.water_removal_fraction,
+                "Thermo basis": "Measured Henry default (B), literature scatter",
+            },
+            {
+                "Solvent": "Acrylonitrile (Phase 13)",
+                "Absorption factor A": report.transfer.absorption_factor,
+                "Removal (%)": 100 * report.solver.removal_fraction,
+                "Thermo basis": "Ideal-dilute Raoult surrogate (D)",
+            },
+        ]), use_container_width=True, hide_index=True)
+
+        r1, r2, r3, r4 = st.columns(4)
+        r1.metric("Inlet", f"{report.gas_inlet_report.total_ppmv:.1f} ppmv")
+        r2.metric("Outlet", f"{report.gas_outlet_report.total_ppmv:.4f} ppmv")
+        r3.metric("Removal", f"{100*report.solver.removal_fraction:.4f}%")
+        r4.metric("A", f"{report.transfer.absorption_factor:.3f}")
+
+        st.dataframe(pd.DataFrame([
+            {"Metric": "Equilibrium slope m", "Value": report.transfer.equilibrium_slope_m, "Unit": "y/x"},
+            {"Metric": "HTU_OG", "Value": report.transfer.HTU_OG_m, "Unit": "m"},
+            {"Metric": "NTU_OG", "Value": report.transfer.NTU_OG, "Unit": "—"},
+            {"Metric": "Effective wetted area", "Value": report.common.effective_area_m2_m3, "Unit": "m²/m³"},
+            {"Metric": "Wet pressure drop", "Value": report.hydraulics.pressure_drop.wet_pressure_drop_Pa_m, "Unit": "Pa/m"},
+            {"Metric": "Flooding", "Value": report.hydraulics.flooding.flooding_percent, "Unit": "%"},
+            {"Metric": "ACN vapor pressure", "Value": report.acn_vapor_pressure_Pa / 1000.0, "Unit": "kPa"},
+            {"Metric": "Mass-balance error", "Value": report.solver.diagnostics.relative_mass_balance_error, "Unit": "relative"},
+        ]), use_container_width=True, hide_index=True)
+
+        st.info(
+            f"The mathematical screening case predicts a much stronger VDC absorption tendency than water, but this "
+            f"must not be treated as design validation until VDC/AN binary equilibrium and AN evaporation are represented."
+        )
+
+    st.markdown("### Source / evidence trail")
+    st.write(f"**AN bulk properties:** {ACN_BULK_SOURCE}")
+    st.write(f"**VDC vapor pressure:** {VDC_VP_SOURCE}")
+    st.write(f"**AN vapor pressure:** {ACN_VP_SOURCE}")
+    st.write(f"**VDC/AN equilibrium:** {VDC_ACN_EQUILIBRIUM_SOURCE}")
+    st.write(f"**DL estimator caveat:** {WILKE_CHANG_ACN_NOTE}")
+    st.write(f"**Project pilot observation:** {PROJECT_PILOT_NOTE}")
+    st.caption(
+        "The project pilot observation is not used to tune m, kL, kG or KG because the inlet VDC concentration and "
+        "complete material-balance basis are not documented in the available slide summary."
     )
 
 

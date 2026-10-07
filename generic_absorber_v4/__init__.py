@@ -1,4 +1,4 @@
-"""Generic Packed Absorber Simulator V4 — Phase 11 property estimation correlations."""
+"""Generic Packed Absorber Simulator V4 — Phase 13 VDC/acrylonitrile screening extension."""
 
 from .models import (
     CarrierGasSpec,
@@ -346,4 +346,63 @@ __all__.extend([
     "run_vdc_water_case",
     "vdc_water_boundary",
     "vdc_water_operating_point",
+])
+
+# Phase 13 — VDC / acrylonitrile screening solvent extension
+from .vdc_acn import (
+    PHASE13_VDC_ACN_CASE_ID,
+    ACN_SOLVENT_ID,
+    ACN_SOLVENT_NAME,
+    ACN_CAS,
+    ACN_FORMULA,
+    ACN_MW_KG_MOL,
+    ACN_DENSITY_22C_KG_M3,
+    ACN_VISCOSITY_NEAR_AMBIENT_PA_S,
+    ACN_SURFACE_TENSION_NEAR_AMBIENT_N_M,
+    ACN_WILKE_CHANG_ASSOCIATION_FACTOR,
+    VDC_ACN_GAMMA_INFINITY_SCREENING,
+    VDC_ACN_LINEAR_M_22C,
+    ACN_VAPOR_FRACTION_IF_SATURATED_22C,
+    ACN_BULK_SOURCE,
+    VDC_VP_SOURCE,
+    ACN_VP_SOURCE,
+    VDC_ACN_EQUILIBRIUM_SOURCE,
+    WILKE_CHANG_ACN_NOTE,
+    PROJECT_PILOT_NOTE,
+    VDCACNReport,
+    vdc_vapor_pressure_Pa,
+    acrylonitrile_vapor_pressure_Pa,
+    build_vdc_acn_registry,
+    vdc_acn_operating_point,
+    vdc_acn_boundary,
+    run_vdc_acn_case,
+)
+
+__all__.extend([
+    "PHASE13_VDC_ACN_CASE_ID",
+    "ACN_SOLVENT_ID",
+    "ACN_SOLVENT_NAME",
+    "ACN_CAS",
+    "ACN_FORMULA",
+    "ACN_MW_KG_MOL",
+    "ACN_DENSITY_22C_KG_M3",
+    "ACN_VISCOSITY_NEAR_AMBIENT_PA_S",
+    "ACN_SURFACE_TENSION_NEAR_AMBIENT_N_M",
+    "ACN_WILKE_CHANG_ASSOCIATION_FACTOR",
+    "VDC_ACN_GAMMA_INFINITY_SCREENING",
+    "VDC_ACN_LINEAR_M_22C",
+    "ACN_VAPOR_FRACTION_IF_SATURATED_22C",
+    "ACN_BULK_SOURCE",
+    "VDC_VP_SOURCE",
+    "ACN_VP_SOURCE",
+    "VDC_ACN_EQUILIBRIUM_SOURCE",
+    "WILKE_CHANG_ACN_NOTE",
+    "PROJECT_PILOT_NOTE",
+    "VDCACNReport",
+    "vdc_vapor_pressure_Pa",
+    "acrylonitrile_vapor_pressure_Pa",
+    "build_vdc_acn_registry",
+    "vdc_acn_operating_point",
+    "vdc_acn_boundary",
+    "run_vdc_acn_case",
 ])

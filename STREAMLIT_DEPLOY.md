@@ -26,3 +26,10 @@ If Streamlit Cloud retains an old Python module after deployment, use **Manage a
 After deployment/reboot, confirm the sidebar shows `PHASE12_VDC_WATER_GATE = PASS` and the `VDC / Water` tab is visible.
 
 The Phase 12 package adds `generic_absorber_v4/vdc_water.py` and updates `generic_absorber_v4/applicability.py`, `generic_absorber_v4/__init__.py`, and `app.py`. Upload the complete package rather than only the new module.
+
+
+## Phase 13 deployment check
+
+After push/redeploy, confirm the sidebar shows `PHASE13_VDC_ACN_GATE = PASS` and a `VDC / Acrylonitrile` tab is visible.
+
+Upload the complete Phase 13 package rather than only `vdc_acn.py`; `app.py` and `generic_absorber_v4/__init__.py` must be from the same Phase 13 package to avoid mixed-version import errors. If Streamlit Cloud keeps an older module in memory, use **Manage app → Reboot app**.

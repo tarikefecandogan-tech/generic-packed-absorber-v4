@@ -44,3 +44,20 @@ Phase 12 adds the first real chemistry outside the locked ACN/VAc reference data
 - Locked V3 parity: 82/82 PASS.
 
 The default VDC/water fixture gives A << 1 and only low VDC removal at the reference L/G and packed height. This is a screening result, not plant calibration.
+
+
+## Phase 13 — VDC / Acrylonitrile
+
+Phase 13 adds liquid acrylonitrile as a real solvent and runs a VDC/AN screening case through the complete generic chain.
+
+Data governance is intentionally conservative:
+
+- Acrylonitrile bulk liquid properties: near-ambient literature/database values, Confidence B.
+- VDC/air gas diffusivity: Fuller fallback, Confidence C.
+- VDC in acrylonitrile liquid diffusivity: Wilke–Chang fallback, Confidence C; phi=1.0 is a screening assumption.
+- VDC/AN equilibrium: **Confidence D** ideal-dilute Raoult surrogate at 22 °C and 1 atm, `m = Psat,VDC/P`, gamma_inf=1.
+- Acrylonitrile evaporation is materially important near ambient conditions but is not modelled in V4.0, therefore Phase 13 is explicitly outside the recommended design domain.
+
+The deterministic Phase 13 fixture uses the same column/flow basis as Phase 12 so the solvent effect is easy to compare. The screening calculation predicts much stronger VDC uptake into AN than water, but this is not design validation until direct VDC/AN equilibrium data and solvent evaporation are represented.
+
+The project pilot trial (300 L/h N2, 18 L/h AN, final liquid 93.84% AN / 6.16% VDC, outlet 1100 ppm VOC) is preserved as external qualitative evidence only. It is not used to fit the equilibrium slope because the available slide summary does not document inlet VDC and a complete material-balance basis.
