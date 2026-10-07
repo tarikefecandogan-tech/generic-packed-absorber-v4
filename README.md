@@ -1,3 +1,13 @@
+# Generic Packed Absorber Simulator V4 — Phase 14
+
+Phase 14 is the first integrated product-facing release of the V4 development track. It connects the verified data, resolver, Onda/two-film, counter-current ODE, units, hydraulics and applicability layers through a single generic simulation workflow.
+
+**Current gates:** Phase 1–14 PASS · **122/122 tests PASS** · **82/82 locked V3 parity metrics PASS**.
+
+The main Streamlit tab is now **Simulator**. Development and validation tabs remain available for auditability.
+
+---
+
 # Generic Packed Absorber Simulator V4 — Phase 12
 
 Phase 11 introduces controlled transport-property estimation correlations while preserving every prior V3 parity and generic-architecture gate.

@@ -1,3 +1,13 @@
+# Phase 14 deployment note
+
+Deploy `app.py` from the repository root. Upload the **entire Phase 14 package**, not only `simulation.py`, so `app.py`, `generic_absorber_v4/__init__.py`, `generic_absorber_v4/simulation.py`, and `tests/` stay version-aligned.
+
+After pushing to GitHub, Streamlit Community Cloud should redeploy automatically. If an old module is cached, use **Manage app → Reboot app**.
+
+Expected sidebar gate: `PHASE14_INTEGRATED_SIMULATOR_GATE = PASS`.
+
+---
+
 # Streamlit deployment — Phase 11
 
 Use the same GitHub repository and Streamlit app. Replace the local repository contents with the complete Phase 11 package, then commit and push.

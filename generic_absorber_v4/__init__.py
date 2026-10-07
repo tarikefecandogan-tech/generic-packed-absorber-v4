@@ -406,3 +406,28 @@ __all__.extend([
     "vdc_acn_boundary",
     "run_vdc_acn_case",
 ])
+
+# Phase 14 — integrated product-facing generic simulation workflow
+from .simulation import (
+    PHASE14_INTEGRATED_SIMULATOR_ID,
+    GenericAbsorberCase,
+    GenericAbsorberSimulationResult,
+    IntegratedSimulationError,
+    SimulationBlockedError,
+    SoluteCompatibility,
+    build_phase14_registry,
+    compatible_solutes,
+    run_generic_absorber_case,
+)
+
+__all__.extend([
+    "PHASE14_INTEGRATED_SIMULATOR_ID",
+    "GenericAbsorberCase",
+    "GenericAbsorberSimulationResult",
+    "IntegratedSimulationError",
+    "SimulationBlockedError",
+    "SoluteCompatibility",
+    "build_phase14_registry",
+    "compatible_solutes",
+    "run_generic_absorber_case",
+])

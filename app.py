@@ -74,6 +74,14 @@ from generic_absorber_v4 import (
     run_vdc_acn_case,
 )
 
+from generic_absorber_v4 import (
+    GenericAbsorberCase,
+    SimulationBlockedError,
+    build_phase14_registry,
+    compatible_solutes,
+    run_generic_absorber_case,
+)
+
 st.set_page_config(
     page_title="Generic Packed Absorber Simulator V4",
     page_icon="🧪",
@@ -241,13 +249,16 @@ REGISTRY = build_reference_registry()
 RESOLVER = build_reference_resolver()
 COUNTS = REGISTRY.inventory_counts()
 
-st.title("🧪 Generic Packed Absorber Simulator V4")
-st.caption("Phase 12 — VDC / Water Real-Chemistry Extension")
+SIM_REGISTRY = build_phase14_registry()
+SIM_RESOLVER = PropertyResolver(SIM_REGISTRY)
 
-st.warning(
-    "Phase 13 adds VDC / Acrylonitrile as a real-solvent screening case. AN bulk properties are literature-backed, "
-    "but VDC/AN equilibrium currently uses an explicit Confidence D ideal-dilute Raoult surrogate because a direct "
-    "binary VLE dataset has not yet been registered. AN solvent evaporation is also outside the V4.0 model."
+st.title("🧪 Generic Packed Absorber Simulator V4")
+st.caption("Phase 14 — Integrated Generic Absorber User Interface")
+
+st.info(
+    "Phase 14 integrates the verified V4 layers into one product-facing simulator. "
+    "The main Simulator tab runs registry → resolver → Onda → counter-current ODE → units → hydraulics → applicability. "
+    "Development/validation tabs remain available for auditability."
 )
 
 with st.sidebar:
@@ -265,6 +276,7 @@ with st.sidebar:
     st.success("PHASE11_PROPERTY_ESTIMATION_GATE = PASS")
     st.success("PHASE12_VDC_WATER_GATE = PASS")
     st.success("PHASE13_VDC_ACN_GATE = PASS")
+    st.success("PHASE14_INTEGRATED_SIMULATOR_GATE = PASS")
     st.metric("Reference ID", REGISTRY.reference_id)
     st.divider()
     st.caption("Resolution precedence")
@@ -275,6 +287,7 @@ with st.sidebar:
     st.caption("Correlation estimates are Confidence C and never overwrite registered pair data.")
 
 (
+    simulator_tab,
     overview_tab,
     resolver_tab,
     mass_transfer_tab,
@@ -294,6 +307,7 @@ with st.sidebar:
     packing_tab,
     quality_tab,
 ) = st.tabs([
+    "Simulator",
     "Overview",
     "Property Resolver",
     "Mass Transfer",
@@ -314,8 +328,384 @@ with st.sidebar:
     "Data Quality",
 ])
 
+with simulator_tab:
+    st.subheader("Integrated Generic Absorber Simulator")
+    st.caption(
+        "This is the product-facing Phase 14 workflow. The UI only prepares canonical inputs; "
+        "all physics is executed by generic_absorber_v4.simulation.run_generic_absorber_case()."
+    )
+
+    st.markdown("### 1. Chemistry & equipment")
+    c1, c2, c3 = st.columns(3)
+    sim_carrier = c1.selectbox(
+        "Carrier gas", list(SIM_REGISTRY.carriers),
+        format_func=lambda x: SIM_REGISTRY.get_carrier(x).name,
+        key="sim_carrier",
+    )
+    sim_solvent = c2.selectbox(
+        "Solvent", list(SIM_REGISTRY.solvents),
+        format_func=lambda x: SIM_REGISTRY.get_solvent(x).name,
+        key="sim_solvent",
+    )
+    sim_packing = c3.selectbox(
+        "Packing", list(SIM_REGISTRY.packings),
+        format_func=lambda x: SIM_REGISTRY.get_packing(x).name,
+        key="sim_packing",
+    )
+
+    st.markdown("### 2. Operating conditions")
+    o1, o2, o3 = st.columns(3)
+    sim_temp_C = o1.number_input("Temperature (°C)", value=22.0, step=1.0, key="sim_temp_C")
+    sim_pressure_bar = o2.number_input(
+        "Pressure (bar abs)", min_value=0.05, value=1.01325, step=0.05,
+        format="%.5f", key="sim_pressure_bar"
+    )
+    sim_liquid_kg_h = o3.number_input(
+        "Liquid flow (kg/h)", min_value=0.001, value=2500.0, step=50.0, key="sim_liquid_kg_h"
+    )
+
+    o4, o5, o6 = st.columns(3)
+    sim_diameter = o4.number_input("Column diameter (m)", min_value=0.01, value=0.50, step=0.05, key="sim_diameter")
+    sim_height = o5.number_input("Packed height (m)", min_value=0.01, value=1.40, step=0.10, key="sim_height")
+    sim_flow_basis = o6.selectbox("Gas-flow basis", ["Actual m³/h", "Normal m³/h"], key="sim_flow_basis")
+
+    default_gas_flow = 117.53 if sim_flow_basis == "Actual m³/h" else 108.05
+    sim_gas_flow = st.number_input(
+        f"Gas flow ({sim_flow_basis})", min_value=0.001, value=float(default_gas_flow), step=5.0, key="sim_gas_flow"
+    )
+
+    sim_T_K = sim_temp_C + 273.15
+    sim_P_Pa = sim_pressure_bar * 1e5
+    if sim_flow_basis == "Actual m³/h":
+        sim_actual_gas_m3_h = sim_gas_flow
+    else:
+        sim_actual_gas_m3_h = normal_m3_h_to_actual_m3_h(
+            sim_gas_flow, temperature_K=sim_T_K, pressure_Pa=sim_P_Pa
+        )
+    st.caption(f"Canonical actual gas flow used by physics core: **{sim_actual_gas_m3_h:.4f} m³/h**")
+
+    compatibility = compatible_solutes(
+        SIM_REGISTRY,
+        carrier_id=sim_carrier,
+        solvent_id=sim_solvent,
+        temperature_K=sim_T_K,
+        pressure_Pa=sim_P_Pa,
+    )
+    ready_solutes = [row.solute_id for row in compatibility if row.ready]
+    not_ready = [row for row in compatibility if not row.ready]
+
+    if not ready_solutes:
+        st.error("No registered solute can be fully resolved for the selected carrier/solvent/temperature/pressure.")
+        st.dataframe(pd.DataFrame([{"Solute": x.solute_id, "Reason": x.reason} for x in not_ready]), hide_index=True, use_container_width=True)
+        st.stop()
+
+    default_solutes = [sid for sid in ("ACN", "VAc") if sid in ready_solutes]
+    if not default_solutes:
+        default_solutes = [ready_solutes[0]]
+    sim_solutes = st.multiselect(
+        "Solutes (1–4)",
+        ready_solutes,
+        default=default_solutes,
+        format_func=lambda x: f"{x} — {SIM_REGISTRY.get_solute(x).name}",
+        max_selections=4,
+        key="sim_solutes",
+    )
+
+    if not_ready:
+        with st.expander("Why are some solutes unavailable for this solvent?"):
+            st.dataframe(
+                pd.DataFrame([{"Solute": x.solute_id, "Reason": x.reason} for x in not_ready]),
+                use_container_width=True, hide_index=True,
+            )
+
+    st.markdown("### 3. Gas feed")
+    sim_input_mode = st.radio(
+        "Gas-feed input mode",
+        ["Component-by-component", "Total concentration + composition"],
+        horizontal=True,
+        key="sim_input_mode",
+    )
+    sim_gas_basis_label = st.selectbox(
+        "Concentration basis",
+        [b.value for b in GasConcentrationBasis],
+        key="sim_gas_basis",
+    )
+    sim_gas_basis = GasConcentrationBasis(sim_gas_basis_label)
+
+    component_values = {}
+    total_value = None
+    fraction_values = {}
+    fraction_basis = CompositionFractionBasis.VOC_MASS
+    if sim_solutes:
+        if sim_input_mode == "Component-by-component":
+            feed_cols = st.columns(min(len(sim_solutes), 4))
+            for idx, sid in enumerate(sim_solutes):
+                default = 0.0
+                if sim_gas_basis == GasConcentrationBasis.MG_VOC_NM3:
+                    default = 4650.0 if sid == "ACN" and set(sim_solutes) == {"ACN", "VAc"} else (350.0 if sid == "VAc" and set(sim_solutes) == {"ACN", "VAc"} else 1000.0 / len(sim_solutes))
+                elif sim_gas_basis == GasConcentrationBasis.PPMV:
+                    default = 1000.0 / len(sim_solutes)
+                else:
+                    default = 500.0 / len(sim_solutes)
+                component_values[sid] = feed_cols[idx].number_input(
+                    f"{sid} inlet ({sim_gas_basis.value})",
+                    min_value=0.0, value=float(default), format="%.6g", key=f"sim_feed_{sid}_{sim_gas_basis.value}",
+                )
+        else:
+            t1, t2 = st.columns(2)
+            total_value = t1.number_input(
+                f"Total inlet ({sim_gas_basis.value})", min_value=0.0, value=5000.0, format="%.6g", key="sim_total_feed"
+            )
+            frac_label = t2.selectbox(
+                "Composition fraction basis",
+                ["VOC mass", "Mole", "Carbon mass"], key="sim_fraction_basis"
+            )
+            fraction_basis = {
+                "VOC mass": CompositionFractionBasis.VOC_MASS,
+                "Mole": CompositionFractionBasis.MOLE,
+                "Carbon mass": CompositionFractionBasis.CARBON_MASS,
+            }[frac_label]
+            frac_cols = st.columns(min(len(sim_solutes), 4))
+            for idx, sid in enumerate(sim_solutes):
+                default_fraction = 1.0 / len(sim_solutes)
+                if set(sim_solutes) == {"ACN", "VAc"} and fraction_basis == CompositionFractionBasis.VOC_MASS:
+                    default_fraction = 0.93 if sid == "ACN" else 0.07
+                fraction_values[sid] = frac_cols[idx].number_input(
+                    f"{sid} fraction", min_value=0.0, value=float(default_fraction), format="%.6f", key=f"sim_fraction_{sid}"
+                )
+            st.caption("Fractions are normalized internally before conversion to canonical gas mole fractions.")
+
+    st.markdown("### 4. Solvent inlet loading")
+    fresh_solvent = st.checkbox("Fresh solvent (all solute inlet loadings = 0)", value=True, key="sim_fresh_solvent")
+    loading_basis = "x"
+    loading_values = {}
+    if not fresh_solvent and sim_solutes:
+        loading_basis = st.radio("Liquid loading basis", ["Mole fraction x", "mg/L"], horizontal=True, key="sim_loading_basis")
+        load_cols = st.columns(min(len(sim_solutes), 4))
+        for idx, sid in enumerate(sim_solutes):
+            if loading_basis == "Mole fraction x":
+                loading_values[sid] = load_cols[idx].number_input(
+                    f"{sid} solvent inlet x", min_value=0.0, max_value=0.999, value=0.0, format="%.8g", key=f"sim_xin_{sid}"
+                )
+            else:
+                loading_values[sid] = load_cols[idx].number_input(
+                    f"{sid} solvent inlet (mg/L)", min_value=0.0, value=0.0, format="%.6g", key=f"sim_mgl_{sid}"
+                )
+
+    st.markdown("### 5. Model-domain flags")
+    f1, f2 = st.columns(2)
+    default_evap = sim_solvent == "acrylonitrile"
+    solvent_evap_expected = f1.checkbox(
+        "Material solvent evaporation expected",
+        value=default_evap,
+        key=f"sim_evap_{sim_solvent}",
+        help="V4.0 does not include solvent evaporation. Keep this checked for materially volatile solvents so the applicability engine exposes the limitation.",
+    )
+    foaming_expected = f2.checkbox("Foaming expected", value=False, key="sim_foaming")
+
+    run_sim = st.button("Run integrated simulation", type="primary", key="run_integrated_phase14")
+
+    if run_sim:
+        if not sim_solutes:
+            st.error("Select at least one solute.")
+        else:
+            try:
+                sim_specs = {sid: SIM_REGISTRY.get_solute(sid) for sid in sim_solutes}
+                if sim_input_mode == "Component-by-component":
+                    sim_y = canonical_y_from_component_concentrations(
+                        component_values, sim_gas_basis, sim_specs
+                    )
+                else:
+                    mixture = canonical_y_from_total_and_fractions(
+                        total_value,
+                        sim_gas_basis,
+                        fraction_values,
+                        fraction_basis,
+                        sim_specs,
+                        normalize_fractions=True,
+                    )
+                    sim_y = dict(mixture.canonical_y)
+
+                sim_x = {sid: 0.0 for sid in sim_solutes}
+                if not fresh_solvent:
+                    if loading_basis == "Mole fraction x":
+                        sim_x = {sid: float(loading_values[sid]) for sid in sim_solutes}
+                    else:
+                        solvent_state = SIM_RESOLVER.resolve_solvent_state(sim_solvent, sim_T_K)
+                        for sid in sim_solutes:
+                            sim_x[sid] = liquid_mg_L_to_x_dilute(
+                                loading_values[sid],
+                                solute_MW_kg_mol=SIM_REGISTRY.get_solute(sid).MW_kg_mol,
+                                solvent_MW_kg_mol=solvent_state.MW.value,
+                                solvent_density_kg_m3=solvent_state.density.value,
+                            )
+
+                sim_case = GenericAbsorberCase(
+                    operating=AbsorberOperatingPoint(
+                        diameter_m=sim_diameter,
+                        packed_height_m=sim_height,
+                        gas_actual_m3_h=sim_actual_gas_m3_h,
+                        liquid_mass_kg_h=sim_liquid_kg_h,
+                        temperature_K=sim_T_K,
+                        pressure_Pa=sim_P_Pa,
+                    ),
+                    solute_ids=tuple(sim_solutes),
+                    carrier_id=sim_carrier,
+                    solvent_id=sim_solvent,
+                    packing_id=sim_packing,
+                    gas_inlet_y=sim_y,
+                    liquid_inlet_x=sim_x,
+                    solvent_evaporation_expected=solvent_evap_expected,
+                    foaming_expected=foaming_expected,
+                )
+                st.session_state["phase14_result"] = run_generic_absorber_case(
+                    sim_case, registry=SIM_REGISTRY
+                )
+                st.session_state.pop("phase14_blocked", None)
+            except SimulationBlockedError as exc:
+                st.session_state["phase14_blocked"] = exc.report
+                st.session_state.pop("phase14_result", None)
+            except Exception as exc:
+                st.session_state.pop("phase14_result", None)
+                st.exception(exc)
+
+    blocked = st.session_state.get("phase14_blocked")
+    if blocked is not None:
+        st.error(f"PRE-SOLVER STATUS: {blocked.status.value}")
+        st.dataframe(pd.DataFrame([
+            {"Severity": i.severity.value, "Code": i.code, "Scope": i.scope, "Message": i.message}
+            for i in blocked.issues
+        ]), use_container_width=True, hide_index=True)
+
+    result = st.session_state.get("phase14_result")
+    if result is not None:
+        st.divider()
+        st.markdown("## Simulation results")
+        status = result.post_applicability.status.value
+        if result.post_applicability.blocks:
+            st.error(f"FINAL STATUS: {status}")
+        elif result.post_applicability.warnings:
+            st.warning(f"FINAL STATUS: {status}")
+        else:
+            st.success(f"FINAL STATUS: {status}")
+
+        k1, k2, k3, k4, k5, k6 = st.columns(6)
+        k1.metric("Inlet VOC", f"{result.inlet_report.total_mgVOC_Nm3:.3f}", "mg/Nm³")
+        k2.metric("Outlet VOC", f"{result.outlet_report.total_mgVOC_Nm3:.3f}", "mg/Nm³")
+        voc_rem = result.stream_balance.overall_removal_voc_mass
+        k3.metric("VOC mass removal", "—" if voc_rem is None else f"{100*voc_rem:.3f}%")
+        k4.metric("Outlet ppmv", f"{result.outlet_report.total_ppmv:.3f}")
+        k5.metric("% Flood", f"{result.hydraulics.flooding.flooding_percent:.2f}%")
+        k6.metric("Wet ΔP", f"{result.hydraulics.pressure_drop.wet_pressure_drop_mbar_m:.4f}", "mbar/m")
+
+        st.markdown("### Component performance")
+        component_rows = []
+        for sid in result.case.solute_ids:
+            inlet = result.inlet_report.components[sid]
+            outlet = result.outlet_report.components[sid]
+            solved = result.solver_results.components[sid]
+            mt = result.transfer_results[sid]
+            rp = result.resolved_components[sid]
+            component_rows.append({
+                "Solute": sid,
+                "Inlet ppmv": inlet.ppmv,
+                "Outlet ppmv": outlet.ppmv,
+                "Inlet mgVOC/Nm³": inlet.mgVOC_Nm3,
+                "Outlet mgVOC/Nm³": outlet.mgVOC_Nm3,
+                "Removal %": None if solved.removal_fraction is None else 100*solved.removal_fraction,
+                "Captured kg/h": result.stream_balance.captured_kg_h_by_component[sid],
+                "A": mt.absorption_factor,
+                "HTU_OG (m)": mt.HTU_OG_m,
+                "NTU_OG": mt.NTU_OG,
+                "m": mt.equilibrium_slope_m,
+                "DG tier": rp.gas_diffusivity.tier.value,
+                "DL tier": rp.liquid_diffusivity.tier.value,
+                "Eq confidence": rp.equilibrium.active_property.confidence.value,
+                "Mode": solved.diagnostics.mode,
+            })
+        st.dataframe(pd.DataFrame(component_rows), use_container_width=True, hide_index=True)
+
+        r1, r2, r3, r4 = st.columns(4)
+        r1.metric("Molar removal", "—" if result.stream_balance.overall_removal_molar is None else f"{100*result.stream_balance.overall_removal_molar:.3f}%")
+        r2.metric("Carbon-mass removal", "—" if result.stream_balance.overall_removal_carbon_mass is None else f"{100*result.stream_balance.overall_removal_carbon_mass:.3f}%")
+        r3.metric("Captured total", f"{result.stream_balance.total_captured_kg_h:.5f} kg/h")
+        r4.metric("Overall confidence", result.post_applicability.confidence.overall.value)
+
+        with st.expander("Hydraulics details", expanded=False):
+            h = result.hydraulics
+            st.dataframe(pd.DataFrame([{
+                "Ug (m/s)": h.flooding.gas_superficial_velocity_m_s,
+                "U_flood (m/s)": h.flooding.flood_velocity_m_s,
+                "% Flood": h.flooding.flooding_percent,
+                "Regime": h.flooding.hydraulic_regime,
+                "Liquid holdup": h.pressure_drop.liquid_holdup_fraction,
+                "Dry ΔP (Pa/m)": h.pressure_drop.dry_pressure_drop_Pa_m,
+                "Wet ΔP (Pa/m)": h.pressure_drop.wet_pressure_drop_Pa_m,
+                "Total ΔP (mbar)": h.pressure_drop.total_pressure_drop_mbar,
+                "F_LV": h.flooding.F_LV_flood,
+                "GPDC valid": h.flooding.gpdc_valid,
+            }]), use_container_width=True, hide_index=True)
+
+        with st.expander("Applicability / validity issues", expanded=True):
+            issues = result.post_applicability.issues
+            if issues:
+                st.dataframe(pd.DataFrame([
+                    {
+                        "Severity": i.severity.value,
+                        "Code": i.code,
+                        "Scope": i.scope,
+                        "Message": i.message,
+                    }
+                    for i in issues
+                ]), use_container_width=True, hide_index=True)
+            else:
+                st.success("No applicability issues reported.")
+
+        with st.expander("Resolved property provenance", expanded=False):
+            prop_rows = []
+            for sid, rp in result.resolved_components.items():
+                for label, prop in (
+                    ("DG", rp.gas_diffusivity),
+                    ("DL", rp.liquid_diffusivity),
+                    ("Equilibrium", rp.equilibrium.active_property),
+                ):
+                    prop_rows.append({
+                        "Solute": sid,
+                        "Property": label,
+                        "Value": prop.value,
+                        "Unit": prop.unit,
+                        "Tier": prop.tier.value,
+                        "Confidence": prop.confidence.value,
+                        "Method": prop.method,
+                        "Source": prop.source,
+                        "Estimated": prop.estimated,
+                    })
+            st.dataframe(pd.DataFrame(prop_rows), use_container_width=True, hide_index=True)
+
+        st.markdown("### Column profiles")
+        for sid in result.case.solute_ids:
+            solved = result.solver_results.components[sid]
+            with st.expander(f"{sid} profiles"):
+                profile = pd.DataFrame({
+                    "z (m)": solved.z_m,
+                    "gas ppmv": solved.gas_y_profile * 1e6,
+                    "liquid x × 1e6": solved.liquid_x_profile * 1e6,
+                    "driving force (y-mx) × 1e6": solved.driving_force_profile_y * 1e6,
+                }).set_index("z (m)")
+                st.line_chart(profile)
+                st.caption(
+                    f"Mass-balance error: {solved.diagnostics.relative_mass_balance_error:.3e} · "
+                    f"Boundary error: {solved.diagnostics.boundary_error_x:.3e}"
+                )
+
+        st.caption(
+            "Phase 14 is a rating simulator. Required-height design, solvent evaporation, coupled nonideal VLE, "
+            "reaction and energy balance are not yet part of the integrated workflow."
+        )
+
+
 with overview_tab:
-    st.subheader("Phase 13 architecture")
+    st.subheader("Phase 14 architecture")
     st.code(
         """Phase 1 immutable data objects
         ↓
@@ -375,6 +765,14 @@ Phase 12 VDC / Water Real Chemistry
         ↓
 NIST/Gossett Henry equilibrium + Fuller DG + Wilke–Chang DL
 first real non-reference chemistry gate
+        ↓
+Phase 13 VDC / Acrylonitrile Screening Chemistry
+        ↓
+literature bulk AN properties + explicit Confidence D equilibrium surrogate
+        ↓
+Phase 14 Integrated Generic Simulator
+        ↓
+one product-facing case: inputs → full simulation → results + validity
 
 No required-height design yet.""",
         language="text",
@@ -1610,10 +2008,12 @@ with quality_tab:
     st.success("PHASE10_SYNTHETIC_GENERIC_GATE = PASS")
     st.success("PHASE11_PROPERTY_ESTIMATION_GATE = PASS")
     st.success("PHASE12_VDC_WATER_GATE = PASS")
-    st.caption("Phase 12 adds real VDC/water chemistry while preserving the locked 82-metric V3 parity baseline.")
+    st.success("PHASE13_VDC_ACN_GATE = PASS")
+    st.success("PHASE14_INTEGRATED_SIMULATOR_GATE = PASS")
+    st.caption("Phase 14 integrates the full registered chemistry catalog into one product-facing simulation workflow while preserving the locked V3 parity baseline.")
 
 st.divider()
 st.caption(
-    "Generic Packed Absorber Simulator V4 · Phase 12 · VDC / Water Real-Chemistry Extension · "
-    "Next: Phase 13 VDC / Acrylonitrile solvent chemistry"
+    "Generic Packed Absorber Simulator V4 · Phase 14 · Integrated Generic Absorber Interface · "
+    "Next: Phase 15 Live Methods & Assumptions audit trail"
 )
