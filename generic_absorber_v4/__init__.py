@@ -240,3 +240,32 @@ __all__ = [
     "ResolvedComponentProperties",
     "build_reference_resolver",
 ]
+
+# Phase 10 — synthetic generic chemistry verification
+from .synthetic_validation import (
+    SYNTHETIC_CASE_ID,
+    SYNTHETIC_CARRIER_ID,
+    SYNTHETIC_PACKING_ID,
+    SYNTHETIC_SOLUTES,
+    SYNTHETIC_SOLVENT_ID,
+    SyntheticGenericReport,
+    audit_core_for_legacy_identifiers,
+    build_synthetic_registry,
+    run_synthetic_generic_case,
+    synthetic_boundaries,
+    synthetic_operating_point,
+)
+
+__all__.extend([
+    "SYNTHETIC_CASE_ID",
+    "SYNTHETIC_CARRIER_ID",
+    "SYNTHETIC_PACKING_ID",
+    "SYNTHETIC_SOLUTES",
+    "SYNTHETIC_SOLVENT_ID",
+    "SyntheticGenericReport",
+    "audit_core_for_legacy_identifiers",
+    "build_synthetic_registry",
+    "run_synthetic_generic_case",
+    "synthetic_boundaries",
+    "synthetic_operating_point",
+])

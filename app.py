@@ -38,6 +38,9 @@ from generic_absorber_v4 import (
     REFERENCE_SOURCE_SHA256,
     reference_chain_health,
     run_full_v3_parity,
+    SYNTHETIC_CASE_ID,
+    SYNTHETIC_SOLUTES,
+    run_synthetic_generic_case,
 )
 
 st.set_page_config(
@@ -204,12 +207,13 @@ RESOLVER = build_reference_resolver()
 COUNTS = REGISTRY.inventory_counts()
 
 st.title("🧪 Generic Packed Absorber Simulator V4")
-st.caption("Phase 9 — Full V3 Parity Gate")
+st.caption("Phase 10 — Synthetic Generic Chemistry Verification")
 
 st.warning(
-    "Phase 9 does not revise absorber physics. It locks the complete Phase 1–8 reference calculation chain "
-    "against REF_SCRUBBER_2026_10_06 and checks 82 feed, property, Onda, mass-transfer, outlet and hydraulic "
-    "metrics automatically. Required-height design remains outside the current parity scope."
+    "Phase 10 does not revise absorber physics. It verifies that the Phase 1–9 architecture can solve a "
+    "completely synthetic carrier/solvent/two-solute system that is absent from the V3 reference database. "
+    "The test exercises both Henry and direct-linear equilibrium pathways and audits the generic physics "
+    "modules for legacy chemical-name hard-coding."
 )
 
 with st.sidebar:
@@ -223,6 +227,7 @@ with st.sidebar:
     st.success("PHASE7_UNITS_COMPOSITION_GATE = PASS")
     st.success("PHASE8_APPLICABILITY_GATE = PASS")
     st.success("PHASE9_FULL_V3_PARITY_GATE = PASS")
+    st.success("PHASE10_SYNTHETIC_GENERIC_GATE = PASS")
     st.metric("Reference ID", REGISTRY.reference_id)
     st.divider()
     st.caption("Resolution precedence")
@@ -241,6 +246,7 @@ with st.sidebar:
     units_tab,
     applicability_tab,
     parity_tab,
+    synthetic_tab,
     lookup_tab,
     solute_tab,
     fluid_tab,
@@ -256,6 +262,7 @@ with st.sidebar:
     "Units & Composition",
     "Applicability & Validity",
     "V3 Parity Gate",
+    "Synthetic Generic Test",
     "Registry Lookup",
     "Solutes",
     "Carrier & Solvent",
@@ -265,7 +272,7 @@ with st.sidebar:
 ])
 
 with overview_tab:
-    st.subheader("Phase 8 architecture")
+    st.subheader("Phase 10 architecture")
     st.code(
         """Phase 1 immutable data objects
         ↓
@@ -308,6 +315,12 @@ Phase 9 Full V3 Parity Harness
         ↓
 82 locked expected-vs-actual reference checks
 source hash + section gates + regression tolerances
+        ↓
+Phase 10 Synthetic Generic Chemistry Gate
+        ↓
+fictional carrier + solvent + 2 fictional solutes
+Henry path + direct-linear-m path + multicomponent ODE + units + hydraulics
+legacy chemical-name hard-code audit
 
 No required-height design yet.""",
         language="text",
@@ -1082,6 +1095,100 @@ with parity_tab:
         "No existing physics equation was changed in this phase."
     )
 
+
+with synthetic_tab:
+    st.subheader("Synthetic generic chemistry verification")
+    st.caption(
+        "This is a software-architecture verification fixture, not real chemical-property data. "
+        "The synthetic case contains no ACN/VAc/Air/Water registry entries and exercises two fictional "
+        "solutes through the full generic calculation chain."
+    )
+
+    st.info(
+        "Case design: SYN_H uses Henry Hpc equilibrium; SYN_M uses direct linear y*=m·x equilibrium and "
+        "enters with a nonzero solvent loading. Carrier, solvent and packing all use fictional IDs."
+    )
+
+    if st.button("Run Phase 10 synthetic generic gate", type="primary", key="run_phase10_synthetic"):
+        syn = run_synthetic_generic_case()
+        if syn.pass_gate:
+            st.success("PHASE10_SYNTHETIC_GENERIC_GATE = PASS")
+        else:
+            st.error("PHASE10_SYNTHETIC_GENERIC_GATE = FAIL")
+
+        g1, g2, g3, g4 = st.columns(4)
+        g1.metric("Synthetic case", SYNTHETIC_CASE_ID)
+        g2.metric("Solved solutes", len(syn.solver_results.components))
+        g3.metric("Core name audit", "PASS" if syn.core_name_independence_pass else "FAIL")
+        g4.metric("Numerical health", "PASS" if syn.numerical_health_pass else "FAIL")
+
+        st.markdown("### Synthetic registry")
+        inventory = syn.registry.inventory_counts()
+        st.dataframe(pd.DataFrame([
+            {"Object": "Solutes", "Count": inventory["solutes"], "IDs": ", ".join(syn.registry.solutes)},
+            {"Object": "Carrier", "Count": inventory["carriers"], "IDs": ", ".join(syn.registry.carriers)},
+            {"Object": "Solvent", "Count": inventory["solvents"], "IDs": ", ".join(syn.registry.solvents)},
+            {"Object": "Packing", "Count": inventory["packings"], "IDs": ", ".join(syn.registry.packings)},
+        ]), use_container_width=True, hide_index=True)
+
+        component_rows = []
+        for sid in SYNTHETIC_SOLUTES:
+            mt = syn.transfer_results[sid]
+            result = syn.solver_results.components[sid]
+            component_rows.append({
+                "Solute": sid,
+                "Equilibrium": mt.equilibrium_model,
+                "m": mt.equilibrium_slope_m,
+                "A": mt.absorption_factor,
+                "HTU (m)": mt.HTU_OG_m,
+                "NTU": mt.NTU_OG,
+                "y in": result.gas_inlet_y,
+                "y out": result.gas_outlet_y,
+                "x in": result.liquid_inlet_x,
+                "x bottom": result.liquid_bottom_x,
+                "Removal (%)": None if result.removal_fraction is None else 100.0 * result.removal_fraction,
+                "Rel. mass balance error": result.diagnostics.relative_mass_balance_error,
+            })
+        st.markdown("### Generic component results")
+        st.dataframe(pd.DataFrame(component_rows), use_container_width=True, hide_index=True)
+
+        h = syn.hydraulics
+        h1, h2, h3, h4 = st.columns(4)
+        h1.metric("Wet ΔP", f"{h.pressure_drop.wet_pressure_drop_Pa_m:.4f} Pa/m")
+        h2.metric("Flood velocity", f"{h.flooding.flood_velocity_m_s:.4f} m/s")
+        h3.metric("Flooding", f"{h.flooding.flooding_percent:.2f}%")
+        h4.metric("GPDC range", "PASS" if h.flooding.gpdc_valid else "FAIL")
+
+        b = syn.gas_balance
+        st.markdown("### Multicomponent unit/reporting reconstruction")
+        st.dataframe(pd.DataFrame([
+            {"Stream": "Inlet", "ppmv": b.inlet.total_ppmv, "mgVOC/Nm³": b.inlet.total_mgVOC_Nm3, "mgC/Nm³": b.inlet.total_mgC_Nm3},
+            {"Stream": "Outlet", "ppmv": b.outlet.total_ppmv, "mgVOC/Nm³": b.outlet.total_mgVOC_Nm3, "mgC/Nm³": b.outlet.total_mgC_Nm3},
+        ]), use_container_width=True, hide_index=True)
+        st.caption(f"Total captured synthetic-solute mass: {b.total_captured_kg_h:.6f} kg/h")
+
+        st.markdown("### Applicability")
+        a1, a2, a3 = st.columns(3)
+        a1.metric("Pre-solver", syn.pre_applicability.status.value)
+        a2.metric("Post-solver", syn.post_applicability.status.value)
+        a3.metric("Blocking issues", len(syn.post_applicability.blocks))
+
+        st.markdown("### Legacy-name architecture audit")
+        if syn.core_name_independence_pass:
+            st.success(
+                "PASS — mass_transfer.py, countercurrent.py, hydraulics.py, units.py and applicability.py "
+                "contain no standalone ACN/VAc/water/air identifiers."
+            )
+        else:
+            st.error(str(syn.legacy_identifier_hits))
+    else:
+        st.info("Press the button to execute the synthetic full-chain verification case.")
+
+    st.warning(
+        "Synthetic values are intentionally fictional. A PASS proves software generality and numerical plumbing; "
+        "it is not experimental validation of a real chemical system."
+    )
+
 with lookup_tab:
     st.subheader("Exact pair lookup — Phase 2 remains intact")
     c1, c2, c3 = st.columns(3)
@@ -1164,6 +1271,8 @@ with quality_tab:
 - Local negative driving force is reported as physical desorption, while numerical mass-balance/boundary failures receive a distinct NUMERICAL_FAILURE state.
 - Phase 9 runs the complete reference chain and compares 82 locked V3 metrics using declared algebra/coefficient/solver/reporting/hydraulic tolerances.
 - The parity fixture is tied to the locked reference source by SHA-256; future intentional physics revisions must create a new reference rather than silently moving this baseline.
+- Phase 10 verifies the full generic chain with fictional chemistry and audits generic physics modules for legacy chemical-name branching.
+- Synthetic-data PASS demonstrates architecture generality only; it is not real-system validation.
         """
     )
 
@@ -1201,10 +1310,11 @@ with quality_tab:
     st.success("PHASE7_UNITS_COMPOSITION_GATE = PASS")
     st.success("PHASE8_APPLICABILITY_GATE = PASS")
     st.success("PHASE9_FULL_V3_PARITY_GATE = PASS")
-    st.caption("85 automated tests pass in the packaged Phase 9 source tree; the parity harness itself checks 82 locked V3 metrics.")
+    st.success("PHASE10_SYNTHETIC_GENERIC_GATE = PASS")
+    st.caption("96 automated tests pass in the packaged Phase 10 source tree; the Phase 9 parity harness still checks 82 locked V3 metrics independently.")
 
 st.divider()
 st.caption(
-    "Generic Packed Absorber Simulator V4 · Phase 9 · Full V3 Parity Gate · "
-    "Next: Phase 10 synthetic generic chemistry test"
+    "Generic Packed Absorber Simulator V4 · Phase 10 · Synthetic Generic Chemistry Verification · "
+    "Next: Phase 11 property-estimation correlations"
 )
