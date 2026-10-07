@@ -1,4 +1,4 @@
-"""Generic Packed Absorber Simulator V4 — Phase 9 full V3 parity milestone."""
+"""Generic Packed Absorber Simulator V4 — Phase 11 property estimation correlations."""
 
 from .models import (
     CarrierGasSpec,
@@ -12,6 +12,13 @@ from .models import (
     SolventSpec,
 )
 from .reference_data import REFERENCE_ID, ReferenceDataBundle, locked_reference_data
+
+from .correlations import (
+    CorrelationCalculation,
+    CorrelationInputError,
+    fuller_gas_diffusivity_m2_s,
+    wilke_chang_liquid_diffusivity_m2_s,
+)
 from .registry import (
     AbsorberDataRegistry,
     DuplicateRegistrationError,
@@ -240,6 +247,32 @@ __all__ = [
     "ResolvedComponentProperties",
     "build_reference_resolver",
 ]
+
+# Phase 11 — built-in transport-property estimation correlations
+from .estimation_validation import (
+    ESTIMATION_SOLUTE_ID,
+    ESTIMATION_CARRIER_ID,
+    ESTIMATION_SOLVENT_ID,
+    PHASE11_ESTIMATION_CASE_ID,
+    Phase11EstimationReport,
+    build_phase11_estimation_registry,
+    run_phase11_estimation_gate,
+)
+
+__all__.extend([
+    "CorrelationCalculation",
+    "CorrelationInputError",
+    "fuller_gas_diffusivity_m2_s",
+    "wilke_chang_liquid_diffusivity_m2_s",
+    "ESTIMATION_SOLUTE_ID",
+    "ESTIMATION_CARRIER_ID",
+    "ESTIMATION_SOLVENT_ID",
+    "PHASE11_ESTIMATION_CASE_ID",
+    "Phase11EstimationReport",
+    "build_phase11_estimation_registry",
+    "run_phase11_estimation_gate",
+])
+
 
 # Phase 10 — synthetic generic chemistry verification
 from .synthetic_validation import (

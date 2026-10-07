@@ -12,9 +12,9 @@ Important scope boundary
 ------------------------
 This module performs no Onda mass-transfer calculation, no two-film overall
 coefficient calculation, no counter-current ODE solve, and no GPDC/pressure-
-drop calculation.  Fuller and Wilke-Chang are intentionally *not* installed as
-default estimators yet; Phase 3 only provides safe estimator hooks for the
-later estimation-correlation phase.
+drop calculation. Phase 11 installs Fuller and Wilke–Chang as controlled
+fallback estimators after user/database resolution. Estimated values remain
+explicitly tagged as Confidence C and never overwrite registry data.
 """
 from __future__ import annotations
 
@@ -24,6 +24,11 @@ import math
 from typing import Callable, Optional
 
 from .models import ConfidenceClass, DataProvenance, EquilibriumPair
+from .correlations import (
+    CorrelationInputError,
+    fuller_gas_diffusivity_m2_s,
+    wilke_chang_liquid_diffusivity_m2_s,
+)
 from .registry import AbsorberDataRegistry
 
 R = 8.314462618  # J/(mol K)
@@ -305,10 +310,57 @@ class PropertyResolver:
         *,
         gas_diffusivity_estimator: Optional[GasDiffusivityEstimator] = None,
         liquid_diffusivity_estimator: Optional[LiquidDiffusivityEstimator] = None,
+        enable_builtin_estimators: bool = True,
     ) -> None:
         self.registry = registry
+        self.enable_builtin_estimators = bool(enable_builtin_estimators)
         self.gas_diffusivity_estimator = gas_diffusivity_estimator
         self.liquid_diffusivity_estimator = liquid_diffusivity_estimator
+
+    @staticmethod
+    def _builtin_fuller_estimator(solute, carrier, T_K: float, P_Pa: float) -> CorrelationEstimate:
+        if solute.fuller_diffusion_volume is None:
+            raise CorrelationInputError(
+                f"Fuller input missing: solute '{solute.id}' has no fuller_diffusion_volume."
+            )
+        if carrier.fuller_diffusion_volume is None:
+            raise CorrelationInputError(
+                f"Fuller input missing: carrier '{carrier.id}' has no fuller_diffusion_volume."
+            )
+        calc = fuller_gas_diffusivity_m2_s(
+            T_K=T_K,
+            P_Pa=P_Pa,
+            solute_MW_kg_mol=solute.MW_kg_mol,
+            carrier_MW_kg_mol=carrier.MW_kg_mol,
+            solute_diffusion_volume=solute.fuller_diffusion_volume,
+            carrier_diffusion_volume=carrier.fuller_diffusion_volume,
+        )
+        return CorrelationEstimate(
+            calc.value_m2_s, calc.method, source="Fuller engineering correlation",
+            note=f"{calc.note} Equation basis: {calc.equation_basis}"
+        )
+
+    def _builtin_wilke_chang_estimator(self, solute, solvent, T_K: float) -> CorrelationEstimate:
+        if solute.boiling_molar_volume_cm3_mol is None:
+            raise CorrelationInputError(
+                f"Wilke–Chang input missing: solute '{solute.id}' has no boiling_molar_volume_cm3_mol."
+            )
+        if solvent.wilke_chang_association_factor is None:
+            raise CorrelationInputError(
+                f"Wilke–Chang input missing: solvent '{solvent.id}' has no wilke_chang_association_factor."
+            )
+        solvent_state = self.resolve_solvent_state(solvent.id, T_K)
+        calc = wilke_chang_liquid_diffusivity_m2_s(
+            T_K=T_K,
+            solvent_mu_Pa_s=solvent_state.viscosity.value,
+            solvent_MW_kg_mol=solvent.MW_kg_mol,
+            solvent_association_factor=solvent.wilke_chang_association_factor,
+            solute_boiling_molar_volume_cm3_mol=solute.boiling_molar_volume_cm3_mol,
+        )
+        return CorrelationEstimate(
+            calc.value_m2_s, calc.method, source="Wilke–Chang engineering correlation",
+            note=f"{calc.note} Equation basis: {calc.equation_basis}"
+        )
 
     @staticmethod
     def _validate_state(T_K: float, P_Pa: float) -> None:
@@ -483,10 +535,16 @@ class PropertyResolver:
                 note=note,
             )
 
-        if self.gas_diffusivity_estimator is not None:
-            solute = self.registry.get_solute(solute_id)
-            carrier = self.registry.get_carrier(carrier_id)
-            estimate = self.gas_diffusivity_estimator(solute, carrier, T_K, P_Pa)
+        solute = self.registry.get_solute(solute_id)
+        carrier = self.registry.get_carrier(carrier_id)
+        estimator = self.gas_diffusivity_estimator
+        if estimator is None and self.enable_builtin_estimators:
+            estimator = self._builtin_fuller_estimator
+        if estimator is not None:
+            try:
+                estimate = estimator(solute, carrier, T_K, P_Pa)
+            except CorrelationInputError:
+                raise MissingPropertyError("gas diffusivity", (solute_id, carrier_id)) from None
             return _estimated_property("gas diffusivity", estimate, "m²/s")
 
         raise MissingPropertyError("gas diffusivity", (solute_id, carrier_id))
@@ -527,10 +585,16 @@ class PropertyResolver:
                 note=note,
             )
 
-        if self.liquid_diffusivity_estimator is not None:
-            solute = self.registry.get_solute(solute_id)
-            solvent = self.registry.get_solvent(solvent_id)
-            estimate = self.liquid_diffusivity_estimator(solute, solvent, T_K)
+        solute = self.registry.get_solute(solute_id)
+        solvent = self.registry.get_solvent(solvent_id)
+        estimator = self.liquid_diffusivity_estimator
+        if estimator is None and self.enable_builtin_estimators:
+            estimator = self._builtin_wilke_chang_estimator
+        if estimator is not None:
+            try:
+                estimate = estimator(solute, solvent, T_K)
+            except CorrelationInputError:
+                raise MissingPropertyError("liquid diffusivity", (solute_id, solvent_id)) from None
             return _estimated_property("liquid diffusivity", estimate, "m²/s")
 
         raise MissingPropertyError("liquid diffusivity", (solute_id, solvent_id))
@@ -663,7 +727,7 @@ class PropertyResolver:
 
 
 def build_reference_resolver() -> PropertyResolver:
-    """Reference resolver with no default diffusivity estimators enabled."""
+    """Reference resolver; registered V3 pair values retain priority over estimators."""
     from .registry import build_reference_registry
 
     return PropertyResolver(build_reference_registry())

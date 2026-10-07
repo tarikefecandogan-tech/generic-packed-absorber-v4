@@ -41,6 +41,8 @@ from generic_absorber_v4 import (
     SYNTHETIC_CASE_ID,
     SYNTHETIC_SOLUTES,
     run_synthetic_generic_case,
+    PHASE11_ESTIMATION_CASE_ID,
+    run_phase11_estimation_gate,
 )
 
 st.set_page_config(
@@ -67,6 +69,8 @@ def solute_df(db):
             "MW (g/mol)": s.MW_kg_mol * 1000,
             "Carbon atoms": s.carbon_atoms,
             "CAS": s.cas_number or "—",
+            "Fuller volume": s.fuller_diffusion_volume,
+            "Boiling molar V (cm³/mol)": s.boiling_molar_volume_cm3_mol,
         }
         for s in db.solutes.values()
     ])
@@ -82,6 +86,7 @@ def carrier_df(db):
             "mu_ref (Pa·s)": c.mu_ref_Pa_s,
             "T_ref (K)": c.T_ref_K,
             "Sutherland S (K)": c.sutherland_S_K,
+            "Fuller volume": c.fuller_diffusion_volume,
             "Data": provenance_text(c),
         }
         for c in db.carriers.values()
@@ -99,6 +104,7 @@ def solvent_df(db):
             "rho const. (kg/m³)": s.rho_kg_m3,
             "mu const. (Pa·s)": s.mu_Pa_s,
             "sigma const. (N/m)": s.sigma_N_m,
+            "Wilke–Chang φ": s.wilke_chang_association_factor,
             "Data": provenance_text(s),
         }
         for s in db.solvents.values()
@@ -207,13 +213,12 @@ RESOLVER = build_reference_resolver()
 COUNTS = REGISTRY.inventory_counts()
 
 st.title("🧪 Generic Packed Absorber Simulator V4")
-st.caption("Phase 10 — Synthetic Generic Chemistry Verification")
+st.caption("Phase 11 — Property Estimation Correlations")
 
 st.warning(
-    "Phase 10 does not revise absorber physics. It verifies that the Phase 1–9 architecture can solve a "
-    "completely synthetic carrier/solvent/two-solute system that is absent from the V3 reference database. "
-    "The test exercises both Henry and direct-linear equilibrium pathways and audits the generic physics "
-    "modules for legacy chemical-name hard-coding."
+    "Phase 11 adds controlled transport-property fallback estimators. Registered pair data still have priority. "
+    "Fuller and Wilke–Chang are used only when the corresponding binary diffusivity pair is missing and all "
+    "required pure-component inputs are available. Every estimated value is explicitly tagged Confidence C."
 )
 
 with st.sidebar:
@@ -228,14 +233,15 @@ with st.sidebar:
     st.success("PHASE8_APPLICABILITY_GATE = PASS")
     st.success("PHASE9_FULL_V3_PARITY_GATE = PASS")
     st.success("PHASE10_SYNTHETIC_GENERIC_GATE = PASS")
+    st.success("PHASE11_PROPERTY_ESTIMATION_GATE = PASS")
     st.metric("Reference ID", REGISTRY.reference_id)
     st.divider()
     st.caption("Resolution precedence")
     st.write("**1. User override**")
     st.write("**2. Registered database**")
-    st.write("**3. Correlation estimate hook**")
+    st.write("**3. Correlation estimate (Fuller / Wilke–Chang)**")
     st.write("**4. Missing → explicit error**")
-    st.caption("Fuller / Wilke–Chang are not enabled as default estimators yet.")
+    st.caption("Correlation estimates are Confidence C and never overwrite registered pair data.")
 
 (
     overview_tab,
@@ -247,6 +253,7 @@ with st.sidebar:
     applicability_tab,
     parity_tab,
     synthetic_tab,
+    estimation_tab,
     lookup_tab,
     solute_tab,
     fluid_tab,
@@ -263,6 +270,7 @@ with st.sidebar:
     "Applicability & Validity",
     "V3 Parity Gate",
     "Synthetic Generic Test",
+    "Property Estimates",
     "Registry Lookup",
     "Solutes",
     "Carrier & Solvent",
@@ -272,7 +280,7 @@ with st.sidebar:
 ])
 
 with overview_tab:
-    st.subheader("Phase 10 architecture")
+    st.subheader("Phase 11 architecture")
     st.code(
         """Phase 1 immutable data objects
         ↓
@@ -321,6 +329,12 @@ Phase 10 Synthetic Generic Chemistry Gate
 fictional carrier + solvent + 2 fictional solutes
 Henry path + direct-linear-m path + multicomponent ODE + units + hydraulics
 legacy chemical-name hard-code audit
+        ↓
+Phase 11 Property Estimation Correlations
+        ↓
+missing DG → Fuller (when inputs exist)
+missing DL → Wilke–Chang (when inputs exist)
+all estimates → CORRELATION_ESTIMATE / Confidence C
 
 No required-height design yet.""",
         language="text",
@@ -1189,6 +1203,66 @@ with synthetic_tab:
         "it is not experimental validation of a real chemical system."
     )
 
+with estimation_tab:
+    st.subheader("Phase 11 — Fuller / Wilke–Chang estimation gate")
+    st.caption(
+        "This screen verifies the fallback path only. EST_X is a synthetic solute with no registered DG/DL pair. "
+        "The fixture uses a separate synthetic carrier and solvent containing the required Fuller / Wilke–Chang inputs. "
+        "The resulting diffusivities are estimates, not validated binary measurements."
+    )
+
+    st.code(
+        "User Override > Registered Pair Data > Correlation Estimate > Missing",
+        language="text",
+    )
+
+    if st.button("Run Phase 11 property-estimation gate", type="primary", key="run_phase11_estimation"):
+        report = run_phase11_estimation_gate()
+        if report.pass_gate:
+            st.success("PHASE11_PROPERTY_ESTIMATION_GATE = PASS")
+        else:
+            st.error("PHASE11_PROPERTY_ESTIMATION_GATE = FAIL")
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Fixture", PHASE11_ESTIMATION_CASE_ID)
+        c2.metric("Fuller DG", f"{report.estimated_DG_m2_s:.6e} m²/s")
+        c3.metric("Wilke–Chang DL", f"{report.estimated_DL_m2_s:.6e} m²/s")
+
+        st.dataframe(pd.DataFrame([
+            {
+                "Property": "Gas diffusivity DG",
+                "Method": "Fuller–Schettler–Giddings",
+                "Tier": report.gas_tier,
+                "Confidence": report.gas_confidence,
+                "Value (m²/s)": report.estimated_DG_m2_s,
+            },
+            {
+                "Property": "Liquid diffusivity DL",
+                "Method": "Wilke–Chang",
+                "Tier": report.liquid_tier,
+                "Confidence": report.liquid_confidence,
+                "Value (m²/s)": report.estimated_DL_m2_s,
+            },
+        ]), use_container_width=True, hide_index=True)
+
+        g1, g2, g3 = st.columns(3)
+        g1.metric("Database priority", "PASS" if report.reference_database_priority_pass else "FAIL")
+        g2.metric("Override priority", "PASS" if report.override_priority_pass else "FAIL")
+        g3.metric("Missing-input block", "PASS" if report.missing_input_block_pass else "FAIL")
+
+    st.markdown("### Correlation requirements")
+    st.write(
+        "**Fuller:** solute MW + carrier MW + solute Fuller diffusion volume + carrier Fuller diffusion volume + T + P."
+    )
+    st.write(
+        "**Wilke–Chang:** solvent MW + solvent viscosity at T + solvent association factor φ + "
+        "solute molar volume at normal boiling point + T."
+    )
+    st.warning(
+        "If a required correlation input is absent, Phase 11 does not invent it. Resolution stops with MissingPropertyError."
+    )
+
+
 with lookup_tab:
     st.subheader("Exact pair lookup — Phase 2 remains intact")
     c1, c2, c3 = st.columns(3)
@@ -1311,10 +1385,11 @@ with quality_tab:
     st.success("PHASE8_APPLICABILITY_GATE = PASS")
     st.success("PHASE9_FULL_V3_PARITY_GATE = PASS")
     st.success("PHASE10_SYNTHETIC_GENERIC_GATE = PASS")
-    st.caption("96 automated tests pass in the packaged Phase 10 source tree; the Phase 9 parity harness still checks 82 locked V3 metrics independently.")
+    st.success("PHASE11_PROPERTY_ESTIMATION_GATE = PASS")
+    st.caption("104 automated tests pass in the packaged Phase 11 source tree; the Phase 9 parity harness still checks 82 locked V3 metrics independently.")
 
 st.divider()
 st.caption(
-    "Generic Packed Absorber Simulator V4 · Phase 10 · Synthetic Generic Chemistry Verification · "
-    "Next: Phase 11 property-estimation correlations"
+    "Generic Packed Absorber Simulator V4 · Phase 11 · Property Estimation Correlations · "
+    "Next: Phase 12 VDC / Water chemistry dataset"
 )
