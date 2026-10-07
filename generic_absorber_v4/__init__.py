@@ -1,4 +1,4 @@
-"""Generic Packed Absorber Simulator V4 — Phase 17 engineering comparison tools."""
+"""Generic Packed Absorber Simulator V4 — Phase 18E engineering database explorer."""
 
 from .models import (
     CarrierGasSpec,
@@ -639,4 +639,31 @@ __all__.extend([
     "PHASE18D_VALIDATION_ID",
     "Phase18DCutoverReport",
     "run_phase18d_cutover_gate",
+])
+
+# Phase 18E — read-only database explorer and chemistry coverage matrix
+from .database_explorer import (
+    PHASE18E_DATABASE_EXPLORER_ID,
+    DEFAULT_COVERAGE_T_K,
+    DEFAULT_COVERAGE_P_PA,
+    CoverageStatus,
+    STATUS_SYMBOLS,
+    CoverageCell,
+    CoverageSummary,
+    ExplorerGateReport,
+    DatabaseExplorer,
+    run_phase18e_explorer_gate,
+)
+
+__all__.extend([
+    "PHASE18E_DATABASE_EXPLORER_ID",
+    "DEFAULT_COVERAGE_T_K",
+    "DEFAULT_COVERAGE_P_PA",
+    "CoverageStatus",
+    "STATUS_SYMBOLS",
+    "CoverageCell",
+    "CoverageSummary",
+    "ExplorerGateReport",
+    "DatabaseExplorer",
+    "run_phase18e_explorer_gate",
 ])
