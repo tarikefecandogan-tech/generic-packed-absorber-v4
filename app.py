@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import json
 
 import pandas as pd
 import streamlit as st
@@ -129,6 +130,17 @@ from generic_absorber_v4 import (
     CoverageStatus,
     DatabaseExplorer,
     run_phase18e_explorer_gate,
+)
+
+from generic_absorber_v4 import (
+    PHASE18F_EXPANSION_FRAMEWORK_ID,
+    PHASE18F_IMPORT_CONTRACT_VERSION,
+    PHASE18F_TEMPLATE_FILENAME,
+    ImportSeverity,
+    SQLiteAbsorberRepositoryV18B,
+    chemical_import_template,
+    validate_chemical_import_package,
+    run_phase18f_expansion_gate,
 )
 
 st.set_page_config(
@@ -316,7 +328,7 @@ DATA_REPOSITORIES = {
 }
 
 st.title("🧪 Generic Packed Absorber Simulator V4")
-st.caption("Phase 18E — Engineering Database Explorer & Coverage Matrix")
+st.caption("Phase 18F — Controlled Chemical Database Expansion Framework")
 
 st.info(
     "Phase 18E adds a read-only engineering Database Explorer on top of the validated SQLite primary source. "
@@ -364,6 +376,7 @@ with st.sidebar:
     database_tab,
     provenance_tab,
     explorer_tab,
+    expansion_tab,
     repository_tab,
     overview_tab,
     resolver_tab,
@@ -391,6 +404,7 @@ with st.sidebar:
     "Database Migration",
     "Data Provenance",
     "Database Explorer",
+    "Expansion Framework",
     "Repository Backends",
     "Overview",
     "Property Resolver",
@@ -1468,6 +1482,126 @@ with explorer_tab:
         st.info(
             "Phase 18E is deliberately read-only. A green cell means the current database can resolve the critical pair data without transport estimates; "
             "it does not by itself mean the absorber design is valid. Applicability, hydraulics and performance remain separate checks."
+        )
+
+
+with expansion_tab:
+    st.subheader("Phase 18F — Chemical Database Expansion Framework")
+    st.caption(
+        "Controlled JSON import contract for adding new chemistry to the engineering database. "
+        "This Streamlit page is intentionally dry-run only: it validates data, provenance, collisions and model-specific fields but never writes the primary database."
+    )
+
+    expansion_db_path = Path(__file__).resolve().parent / "database" / "absorber_database_v18b.db"
+    if not expansion_db_path.exists():
+        st.error(f"Primary engineering database not found: {expansion_db_path}")
+    else:
+        exp_repo = SQLiteAbsorberRepositoryV18B(expansion_db_path)
+        f1, f2, f3, f4 = st.columns(4)
+        f1.metric("Import contract", PHASE18F_IMPORT_CONTRACT_VERSION)
+        f2.metric("Schema target", exp_repo.metadata().get("schema_version", "—"))
+        f3.metric("Current solutes", exp_repo.inventory().solutes)
+        f4.metric("Current equilibrium pairs", exp_repo.inventory().equilibrium_pairs)
+
+        st.markdown("### Expansion rules")
+        st.write(
+            "Every imported engineering record must have explicit provenance. Confidence A/B data require a source title and DOI or URL. "
+            "Existing IDs/pairs are append-only by default; replacements require an explicit operator action. "
+            "Missing Fuller/Le Bas/Wilke–Chang inputs are allowed only as visible readiness warnings, never silently fabricated."
+        )
+
+        template18f = chemical_import_template()
+        template_json18f = json.dumps(template18f, indent=2, ensure_ascii=False) + "\n"
+        st.download_button(
+            "Download chemical import template",
+            data=template_json18f,
+            file_name=PHASE18F_TEMPLATE_FILENAME,
+            mime="application/json",
+            key="phase18f_template_download",
+        )
+
+        st.markdown("### Dry-run validator")
+        uploaded18f = st.file_uploader(
+            "Upload a Phase 18F JSON package",
+            type=["json"],
+            key="phase18f_import_uploader",
+            help="Validation only. This page does not commit changes to SQLite.",
+        )
+        if uploaded18f is not None:
+            try:
+                uploaded_package18f = json.loads(uploaded18f.getvalue().decode("utf-8"))
+                validation18f = validate_chemical_import_package(uploaded_package18f, exp_repo)
+                if validation18f.pass_validation:
+                    st.success("DRY-RUN VALIDATION = PASS")
+                else:
+                    st.error("DRY-RUN VALIDATION = BLOCKED")
+
+                d = validation18f.planned_delta
+                d1, d2, d3, d4 = st.columns(4)
+                d1.metric("New solutes", d.solutes)
+                d2.metric("New solvents", d.solvents)
+                d3.metric("Equilibrium pairs", d.equilibrium_pairs)
+                d4.metric("Sources", d.sources)
+
+                issues_df = pd.DataFrame([
+                    {
+                        "Severity": x.severity.value,
+                        "Code": x.code,
+                        "Location": x.location,
+                        "Message": x.message,
+                    }
+                    for x in validation18f.issues
+                ])
+                if issues_df.empty:
+                    st.info("No validation issues.")
+                else:
+                    st.dataframe(issues_df, use_container_width=True, hide_index=True)
+
+                if validation18f.readiness:
+                    st.markdown("#### Estimator readiness")
+                    st.dataframe(pd.DataFrame(validation18f.readiness), use_container_width=True, hide_index=True)
+            except Exception as exc:
+                st.error(f"Could not parse/validate package: {type(exc).__name__}: {exc}")
+        else:
+            st.info(
+                "Download the template, populate it from traceable engineering sources, then upload it here for a non-destructive dry run. "
+                "Actual commits are performed explicitly with chemical_import_cli.py; dry-run is the CLI default there as well."
+            )
+
+        with st.expander("Operator import workflow", expanded=False):
+            st.code(
+                "python chemical_import_cli.py my_package.json\n"
+                "# validation only (default)\n\n"
+                "python chemical_import_cli.py my_package.json --commit\n"
+                "# explicit transactional commit + automatic backup",
+                language="bash",
+            )
+            st.warning(
+                "--allow-replace is intentionally separate and should only be used after reconciling the existing source/provenance record. "
+                "A production replacement is not a normal append operation."
+            )
+
+        if st.button("Run Phase 18F expansion-framework gate", key="phase18f_gate_button"):
+            gate18f = run_phase18f_expansion_gate(expansion_db_path)
+            if gate18f.pass_gate:
+                st.success("PHASE18F_CHEMICAL_EXPANSION_GATE = PASS")
+            else:
+                st.error("PHASE18F_CHEMICAL_EXPANSION_GATE = FAIL")
+            st.dataframe(pd.DataFrame([
+                {"Check":"Dry-run valid", "Result":gate18f.dry_run_valid},
+                {"Check":"Dry-run leaves DB unchanged", "Result":gate18f.dry_run_unchanged},
+                {"Check":"Temporary-copy commit", "Result":gate18f.committed_to_temporary_copy},
+                {"Check":"Inventory delta", "Result":gate18f.temporary_inventory_delta_ok},
+                {"Check":"Imported coverage resolvable", "Result":gate18f.imported_coverage_resolvable},
+                {"Check":"Invalid package blocked", "Result":gate18f.invalid_package_blocked},
+                {"Check":"Collision blocked", "Result":gate18f.collision_blocked},
+                {"Check":"Rollback/read-only hash", "Result":gate18f.rollback_unchanged},
+                {"Check":"Primary DB unchanged", "Result":gate18f.primary_database_unchanged},
+            ]), use_container_width=True, hide_index=True)
+
+        st.info(
+            "Phase 18F creates the controlled ingestion path; it does not add any new real chemical to the shipped primary database. "
+            "Scientific database expansion should happen only after the package passes this validator and its sources have been reviewed."
         )
 
 

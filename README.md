@@ -185,3 +185,22 @@ New explorer capabilities:
 - generate a prioritized missing-data / data-quality backlog.
 
 The explorer is deliberately read-only and does not calculate absorber performance. See `PHASE18E_STATUS.md` for the current coverage snapshot and acceptance gate.
+
+## Phase 18F — controlled chemical database expansion
+Phase 18F adds a versioned JSON ingestion contract (`18F.1`) for expanding the engineering database without bypassing provenance or validation. Use `database/templates/chemical_import_template.json` as the starting form.
+
+Validation/dry-run is the default:
+
+```bash
+python chemical_import_cli.py my_chemical_package.json
+```
+
+An explicit transactional commit is:
+
+```bash
+python chemical_import_cli.py my_chemical_package.json --commit
+```
+
+A backup is created by default before a commit. Existing IDs/pairs remain append-only unless the operator explicitly adds `--allow-replace`. The Streamlit `Expansion Framework` tab is deliberately dry-run only.
+
+Phase 18F does **not** add a new real chemical to the primary SQLite database; it creates the controlled path by which reviewed data can be added in the next expansion stages.

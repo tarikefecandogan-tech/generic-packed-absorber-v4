@@ -192,3 +192,16 @@ Recommended commit message:
 `Phase 18E - database explorer and coverage matrix`
 
 After deployment, use **Manage app → Reboot app** if Streamlit is retaining an older module graph. Confirm the sidebar shows `PHASE18E_DATABASE_EXPLORER_GATE = PASS`, then open **Database Explorer**. The default Air / 25 °C / 1.01325 bar coverage matrix should classify ACN/Water and VAc/Water as VERIFIED, VDC/Water as ESTIMATED, VDC/Acrylonitrile as SCREENING, and ACN/VAc with Acrylonitrile as MISSING.
+
+## Phase 18F deployment note
+The app now includes an **Expansion Framework** tab. It can download the canonical JSON template and dry-run validate uploaded import packages, but it intentionally cannot write to the production SQLite database.
+
+Ensure these new files are deployed together:
+- `generic_absorber_v4/chemical_import.py`
+- `database/templates/chemical_import_template.json`
+- `chemical_import_cli.py`
+- `phase18f_check.py`
+- `tests/test_phase18f_chemical_import_framework.py`
+- `PHASE18F_STATUS.md`
+
+No new dependency is required; the framework uses the Python standard library plus the existing V4 package.
